@@ -37,9 +37,12 @@ export interface QoyodInvoice {
 
 export interface QoyodProduct {
   id: number;
-  name: string;
+  name_ar: string;
+  name_en: string;
   sku?: string;
   price: number;
+  selling_price?: string;
+  buying_price?: string;
 }
 
 export interface QoyodCreditNote {

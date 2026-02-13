@@ -155,6 +155,51 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+
+  // Rep Settings
+  reps: router({
+    // Get all rep settings
+    list: protectedProcedure.query(async () => {
+      const { getRepSettings } = await import("./db");
+      const reps = await getRepSettings();
+      return { reps };
+    }),
+
+    // Update rep setting
+    update: protectedProcedure
+      .input((val: unknown) => {
+        if (
+          typeof val === "object" &&
+          val !== null &&
+          "repEmail" in val &&
+          "repNickname" in val &&
+          "monthlyTarget" in val &&
+          "bonusAmount" in val &&
+          typeof val.repEmail === "string" &&
+          typeof val.repNickname === "string" &&
+          typeof val.monthlyTarget === "number" &&
+          typeof val.bonusAmount === "number"
+        ) {
+          return {
+            repEmail: val.repEmail,
+            repNickname: val.repNickname,
+            monthlyTarget: val.monthlyTarget,
+            bonusAmount: val.bonusAmount,
+          };
+        }
+        throw new Error("Invalid input for rep update");
+      })
+      .mutation(async ({ input }: { input: { repEmail: string; repNickname: string; monthlyTarget: number; bonusAmount: number } }) => {
+        const { upsertRepSetting } = await import("./db");
+        await upsertRepSetting(
+          input.repEmail,
+          input.repNickname,
+          input.monthlyTarget,
+          input.bonusAmount
+        );
+        return { success: true };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

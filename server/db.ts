@@ -148,3 +148,39 @@ export async function saveApiKey(userId: number, qoyodApiKey: string) {
       },
     });
 }
+
+// Rep Settings
+export async function getRepSettings() {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { repSettings } = await import("../drizzle/schema");
+  return await db.select().from(repSettings);
+}
+
+export async function upsertRepSetting(
+  repEmail: string,
+  repNickname: string,
+  monthlyTarget: number,
+  bonusAmount: number
+) {
+  const db = await getDb();
+  if (!db) return;
+  
+  const { repSettings } = await import("../drizzle/schema");
+  
+  await db.insert(repSettings)
+    .values({
+      repEmail,
+      repNickname,
+      monthlyTarget,
+      bonusAmount,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        repNickname,
+        monthlyTarget,
+        bonusAmount,
+      },
+    });
+}

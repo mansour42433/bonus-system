@@ -55,3 +55,20 @@ export const apiSettings = mysqlTable("apiSettings", {
 
 export type ApiSetting = typeof apiSettings.$inferSelect;
 export type InsertApiSetting = typeof apiSettings.$inferInsert;
+
+/**
+ * Representative (Sales Rep) settings
+ * Stores nicknames, monthly targets, and bonus amounts per rep
+ */
+export const repSettings = mysqlTable("repSettings", {
+  id: int("id").autoincrement().primaryKey(),
+  repEmail: varchar("repEmail", { length: 320 }).notNull().unique(), // المندوب (email من Qoyod)
+  repNickname: text("repNickname"), // اللقب/الاسم المخصص
+  monthlyTarget: int("monthlyTarget").default(0), // التارجت الشهري
+  bonusAmount: int("bonusAmount").default(0), // المكافأة
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type RepSetting = typeof repSettings.$inferSelect;
+export type InsertRepSetting = typeof repSettings.$inferInsert;

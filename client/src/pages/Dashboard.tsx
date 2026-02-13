@@ -56,6 +56,9 @@ export default function Dashboard() {
 
   // Get product settings
   const { data: settingsData } = trpc.settings.list.useQuery();
+  
+  // Get rep settings
+  const { data: repsData } = trpc.reps.list.useQuery();
 
   // Calculate bonus
   const calculateBonusData = () => {
@@ -143,7 +146,7 @@ export default function Dashboard() {
           paidInvoices.push({
             reference: invoice.reference,
             rep: invoice.created_by,
-            product: item.product_name,
+            product: setting?.productName || item.product_name,
             quantity: actualQuantity,
             returnedQty: returnedQty,
             price: priceWithTax,
@@ -156,7 +159,7 @@ export default function Dashboard() {
           pendingInvoices.push({
             reference: invoice.reference,
             rep: invoice.created_by,
-            product: item.product_name,
+            product: setting?.productName || item.product_name,
             quantity: item.quantity,
             expectedBonus: bonus,
             status: "آجل - غير مدفوعة",
@@ -177,10 +180,16 @@ export default function Dashboard() {
 
   const bonusData = calculateBonusData();
 
-  // Get unique reps
+  // Get unique reps with nicknames
   const uniqueReps = bonusData
     ? Array.from(new Set(bonusData.paidInvoices.map((inv: any) => inv.rep)))
     : [];
+  
+  // Helper function to get rep display name
+  const getRepDisplayName = (repEmail: string) => {
+    const repSetting = repsData?.reps.find((r) => r.repEmail === repEmail);
+    return repSetting?.repNickname || repEmail;
+  };
 
   const [selectedRep, setSelectedRep] = useState<string>("all");
 
@@ -195,13 +204,18 @@ export default function Dashboard() {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("البونص المستحق");
 
-    // Add headers
+    // Add headers with more details
     worksheet.columns = [
       { header: "المرجع", key: "reference", width: 15 },
       { header: "المندوب", key: "rep", width: 20 },
       { header: "المنتج", key: "product", width: 30 },
       { header: "الكمية", key: "quantity", width: 10 },
+      { header: "كمية مرتجعة", key: "returnedQty", width: 12 },
       { header: "السعر", key: "price", width: 12 },
+      { header: "إجمالي المبيعات", key: "totalSales", width: 15 },
+      { header: "مبيعات 1%", key: "sales1", width: 12 },
+      { header: "مبيعات 2%", key: "sales2", width: 12 },
+      { header: "خصم مرتجعات", key: "returnDeduction", width: 15 },
       { header: "الفئة", key: "category", width: 12 },
       { header: "النسبة", key: "percentage", width: 10 },
       { header: "البونص", key: "bonus", width: 12 },
@@ -216,49 +230,86 @@ export default function Dashboard() {
       fgColor: { argb: "FF2563EB" },
     };
 
-    // Add data
+    // Add data with enhanced details
     filteredInvoices.forEach((inv: any) => {
+      const totalSales = inv.price * inv.quantity;
+      const sales1 = inv.percentage === 1 ? totalSales : 0;
+      const sales2 = inv.percentage === 2 ? totalSales : 0;
+      const returnDeduction = inv.returnedQty > 0 ? (inv.price * inv.returnedQty).toFixed(2) : "0.00";
+      
       const row = worksheet.addRow({
         reference: inv.reference,
-        rep: inv.rep,
+        rep: getRepDisplayName(inv.rep),
         product: inv.product,
         quantity: inv.quantity,
+        returnedQty: inv.returnedQty || 0,
         price: inv.price.toFixed(2),
+        totalSales: totalSales.toFixed(2),
+        sales1: sales1.toFixed(2),
+        sales2: sales2.toFixed(2),
+        returnDeduction: returnDeduction,
         category: inv.category,
         percentage: `${inv.percentage}%`,
         bonus: inv.bonus.toFixed(2),
         date: inv.date,
       });
 
-      // Color code categories
+      // Color code categories (column 11 now)
       if (inv.category === "تميز") {
-        row.getCell(6).fill = {
+        row.getCell(11).fill = {
           type: "pattern",
           pattern: "solid",
           fgColor: { argb: "FF10B981" },
         };
-        row.getCell(6).font = { color: { argb: "FFFFFFFF" } };
+        row.getCell(11).font = { color: { argb: "FFFFFFFF" } };
       } else if (inv.category === "أساسي") {
-        row.getCell(6).fill = {
+        row.getCell(11).fill = {
           type: "pattern",
           pattern: "solid",
           fgColor: { argb: "FFF59E0B" },
         };
-        row.getCell(6).font = { color: { argb: "FFFFFFFF" } };
+        row.getCell(11).font = { color: { argb: "FFFFFFFF" } };
+      }
+      
+      // Highlight returned quantities
+      if (inv.returnedQty > 0) {
+        row.getCell(5).fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFECACA" },
+        };
+        row.getCell(10).fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFECACA" },
+        };
       }
     });
 
-    // Add summary row
+    // Add summary rows
     worksheet.addRow([]);
+    
+    // Calculate totals
+    const totalSalesSum = filteredInvoices.reduce((sum: number, inv: any) => sum + (inv.price * inv.quantity), 0);
+    const sales1Sum = filteredInvoices.reduce((sum: number, inv: any) => sum + (inv.percentage === 1 ? inv.price * inv.quantity : 0), 0);
+    const sales2Sum = filteredInvoices.reduce((sum: number, inv: any) => sum + (inv.percentage === 2 ? inv.price * inv.quantity : 0), 0);
+    const returnDeductionSum = filteredInvoices.reduce((sum: number, inv: any) => sum + (inv.returnedQty > 0 ? inv.price * inv.returnedQty : 0), 0);
+    const totalBonus = filteredInvoices.reduce((sum: number, inv: any) => sum + inv.bonus, 0);
+    
     const summaryRow = worksheet.addRow([
       "",
       "",
-      "إجمالي البونص",
+      "الإجمالي",
       "",
       "",
       "",
+      totalSalesSum.toFixed(2),
+      sales1Sum.toFixed(2),
+      sales2Sum.toFixed(2),
+      returnDeductionSum.toFixed(2),
       "",
-      filteredInvoices.reduce((sum: number, inv: any) => sum + inv.bonus, 0).toFixed(2),
+      "",
+      totalBonus.toFixed(2),
       "",
     ]);
     summaryRow.font = { bold: true };
@@ -359,7 +410,7 @@ export default function Dashboard() {
                   <option value="all">جميع المناديب</option>
                   {uniqueReps.map((rep: string) => (
                     <option key={rep} value={rep}>
-                      {rep}
+                      {getRepDisplayName(rep)}
                     </option>
                   ))}
                 </select>
@@ -457,7 +508,7 @@ export default function Dashboard() {
                       {(selectedRep === "all" ? bonusData?.paidInvoices : bonusData?.paidInvoices.filter((inv: any) => inv.rep === selectedRep))?.map((inv: any, idx: number) => (
                         <tr key={idx} className="border-b hover:bg-gray-50">
                           <td className="p-2">{inv.reference}</td>
-                          <td className="p-2">{inv.rep}</td>
+                          <td className="p-2">{getRepDisplayName(inv.rep)}</td>
                           <td className="p-2">{inv.product}</td>
                           <td className="p-2">{inv.quantity}</td>
                           <td className="p-2">{inv.price.toFixed(2)}</td>
@@ -508,7 +559,7 @@ export default function Dashboard() {
                       {bonusData?.pendingInvoices.map((inv, idx) => (
                         <tr key={idx} className="border-b hover:bg-gray-50">
                           <td className="p-2">{inv.reference}</td>
-                          <td className="p-2">{inv.rep}</td>
+                          <td className="p-2">{getRepDisplayName(inv.rep)}</td>
                           <td className="p-2">{inv.product}</td>
                           <td className="p-2">{inv.quantity}</td>
                           <td className="p-2">{inv.expectedBonus.toFixed(2)}</td>
