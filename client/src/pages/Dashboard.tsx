@@ -32,10 +32,10 @@ export default function Dashboard() {
     },
   });
 
-  // Fetch invoices
+  // Fetch invoices - get last 6 months to catch delayed invoices
   const [startDate, endDate] = (() => {
     const [year, month] = selectedMonth.split("-").map(Number);
-    const start = new Date(year, month - 4, 1); // 4 months back
+    const start = new Date(year, month - 6, 1); // 6 months back to catch all delayed invoices
     const end = new Date(year, month, 0); // Last day of selected month
     return [
       start.toISOString().split("T")[0],
@@ -44,6 +44,12 @@ export default function Dashboard() {
   })();
 
   const { data: invoicesData, isLoading: invoicesLoading, refetch } = trpc.qoyod.fetchInvoices.useQuery(
+    { startDate, endDate },
+    { enabled: !!apiKeyData?.apiKey }
+  );
+
+  // Fetch credit notes
+  const { data: creditNotesData } = trpc.qoyod.fetchCreditNotes.useQuery(
     { startDate, endDate },
     { enabled: !!apiKeyData?.apiKey }
   );
@@ -57,6 +63,19 @@ export default function Dashboard() {
 
     const invoices = invoicesData.invoices;
     const settings = settingsData.settings;
+    const creditNotes = creditNotesData?.creditNotes || [];
+
+    // Build a map of returned quantities by invoice_id and product_id
+    const returnedQuantities = new Map<string, number>();
+    creditNotes.forEach((cn: any) => {
+      if (cn.invoice_id) {
+        cn.line_items?.forEach((item: any) => {
+          const key = `${cn.invoice_id}-${item.product_id}`;
+          const existing = returnedQuantities.get(key) || 0;
+          returnedQuantities.set(key, existing + item.quantity);
+        });
+      }
+    });
 
     let totalSales = 0;
     let sales1Percent = 0;
@@ -66,17 +85,41 @@ export default function Dashboard() {
     const paidInvoices: any[] = [];
     const pendingInvoices: any[] = [];
 
+    const [selectedYear, selectedMonthNum] = selectedMonth.split("-").map(Number);
+
     invoices.forEach((invoice: any) => {
       const isPaid = invoice.status === "Paid";
+      
+      // Get payment date from payments array
+      const paymentDate = invoice.payments?.[invoice.payments.length - 1]?.date;
+      if (!paymentDate && isPaid) return; // Skip if paid but no payment date
+      
+      // Check if payment was made in selected month
+      let isInSelectedMonth = false;
+      if (isPaid && paymentDate) {
+        const [payYear, payMonth] = paymentDate.split("-").map(Number);
+        isInSelectedMonth = payYear === selectedYear && payMonth === selectedMonthNum;
+      }
+      
+      // Skip if paid but not in selected month
+      if (isPaid && !isInSelectedMonth) return;
       
       invoice.line_items?.forEach((item: any) => {
         const setting = settings.find((s) => String(s.productId) === String(item.product_id));
         const premiumPrice = setting?.premiumPrice || 70;
         const basePrice = setting?.basePrice || 69;
 
+        // Check for returned quantities
+        const returnKey = `${invoice.id}-${item.product_id}`;
+        const returnedQty = returnedQuantities.get(returnKey) || 0;
+        const actualQuantity = item.quantity - returnedQty;
+        
+        // Skip if fully returned
+        if (actualQuantity <= 0) return;
+
         // Calculate price with tax
         const priceWithTax = item.unit_price * (1 + (item.tax_percent || 15) / 100);
-        const itemTotal = priceWithTax * item.quantity;
+        const itemTotal = priceWithTax * actualQuantity;
 
         // Determine bonus percentage
         let percentage = 0;
@@ -101,7 +144,8 @@ export default function Dashboard() {
             reference: invoice.reference,
             rep: invoice.created_by,
             product: item.product_name,
-            quantity: item.quantity,
+            quantity: actualQuantity,
+            returnedQty: returnedQty,
             price: priceWithTax,
             category,
             percentage,

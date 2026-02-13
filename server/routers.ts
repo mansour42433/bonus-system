@@ -68,6 +68,34 @@ export const appRouter = router({
         return { invoices };
       }),
 
+    // Fetch credit notes
+    fetchCreditNotes: protectedProcedure
+      .input((val: unknown) => {
+        if (
+          typeof val === "object" &&
+          val !== null &&
+          "startDate" in val &&
+          "endDate" in val &&
+          typeof val.startDate === "string" &&
+          typeof val.endDate === "string"
+        ) {
+          return { startDate: val.startDate, endDate: val.endDate };
+        }
+        throw new Error("Invalid input: startDate and endDate must be strings");
+      })
+      .query(async ({ ctx, input }) => {
+        const { getApiKey } = await import("./db");
+        const { fetchQoyodCreditNotes } = await import("./qoyod");
+
+        const apiKey = await getApiKey(ctx.user.id);
+        if (!apiKey) {
+          throw new Error("يجب حفظ Qoyod API Key أولاً");
+        }
+
+        const creditNotes = await fetchQoyodCreditNotes(apiKey, input.startDate, input.endDate);
+        return { creditNotes };
+      }),
+
     // Fetch products
     fetchProducts: protectedProcedure.query(async ({ ctx }) => {
       const { getApiKey } = await import("./db");

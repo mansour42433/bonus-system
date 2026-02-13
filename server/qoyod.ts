@@ -42,6 +42,23 @@ export interface QoyodProduct {
   price: number;
 }
 
+export interface QoyodCreditNote {
+  id: number;
+  reference: string;
+  issue_date: string;
+  status: string;
+  total: string;
+  invoice_id?: number;
+  line_items: Array<{
+    id: number;
+    product_id: number;
+    product_name: string;
+    quantity: number;
+    unit_price: number;
+    tax_percent: number;
+  }>;
+}
+
 /**
  * Fetch invoices from Qoyod API
  * @param apiKey - Qoyod API key
@@ -100,6 +117,40 @@ export async function fetchQoyodProducts(apiKey: string): Promise<QoyodProduct[]
   } catch (error) {
     console.error("[Qoyod] Failed to fetch products:", error);
     throw error;
+  }
+}
+
+/**
+ * Fetch credit notes from Qoyod API
+ * @param apiKey - Qoyod API key
+ * @param startDate - Start date (YYYY-MM-DD)
+ * @param endDate - End date (YYYY-MM-DD)
+ */
+export async function fetchQoyodCreditNotes(
+  apiKey: string,
+  startDate: string,
+  endDate: string
+): Promise<QoyodCreditNote[]> {
+  const headers = {
+    "API-KEY": apiKey,
+    "Content-Type": "application/json",
+  };
+
+  const url = `${QOYOD_API_BASE}/credit_notes?q[issue_date_gteq]=${startDate}&q[issue_date_lteq]=${endDate}`;
+
+  try {
+    const response = await fetch(url, { headers });
+    
+    if (!response.ok) {
+      throw new Error(`Qoyod API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.credit_notes || [];
+  } catch (error) {
+    console.error("[Qoyod] Failed to fetch credit notes:", error);
+    // Return empty array if credit notes endpoint doesn't exist
+    return [];
   }
 }
 
