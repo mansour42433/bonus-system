@@ -35,7 +35,7 @@ export default function Dashboard() {
   // Fetch invoices
   const [startDate, endDate] = (() => {
     const [year, month] = selectedMonth.split("-").map(Number);
-    const start = new Date(year, month - 3, 1); // 3 months back
+    const start = new Date(year, month - 4, 1); // 4 months back
     const end = new Date(year, month, 0); // Last day of selected month
     return [
       start.toISOString().split("T")[0],
@@ -81,10 +81,10 @@ export default function Dashboard() {
         // Determine bonus percentage
         let percentage = 0;
         let category = "لا بونص";
-        if (priceWithTax >= premiumPrice) {
+        if (priceWithTax >= 70) {
           percentage = 2;
           category = "تميز";
-        } else if (priceWithTax <= basePrice) {
+        } else if (priceWithTax < 70) {
           percentage = 1;
           category = "أساسي";
         }
@@ -133,9 +133,20 @@ export default function Dashboard() {
 
   const bonusData = calculateBonusData();
 
+  // Get unique reps
+  const uniqueReps = bonusData
+    ? Array.from(new Set(bonusData.paidInvoices.map((inv: any) => inv.rep)))
+    : [];
+
+  const [selectedRep, setSelectedRep] = useState<string>("all");
+
   // Export to Excel
   const exportToExcel = async () => {
     if (!bonusData) return;
+
+    const filteredInvoices = selectedRep === "all"
+      ? bonusData.paidInvoices
+      : bonusData.paidInvoices.filter((inv: any) => inv.rep === selectedRep);
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("البونص المستحق");
@@ -162,7 +173,7 @@ export default function Dashboard() {
     };
 
     // Add data
-    bonusData.paidInvoices.forEach((inv: any) => {
+    filteredInvoices.forEach((inv: any) => {
       const row = worksheet.addRow({
         reference: inv.reference,
         rep: inv.rep,
@@ -203,7 +214,7 @@ export default function Dashboard() {
       "",
       "",
       "",
-      bonusData.totalBonus.toFixed(2),
+      filteredInvoices.reduce((sum: number, inv: any) => sum + inv.bonus, 0).toFixed(2),
       "",
     ]);
     summaryRow.font = { bold: true };
@@ -221,7 +232,7 @@ export default function Dashboard() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `bonus-${selectedMonth}.xlsx`;
+    link.download = `bonus-${selectedMonth}${selectedRep !== "all" ? `-${selectedRep}` : ""}.xlsx`;
     link.click();
     URL.revokeObjectURL(url);
 
@@ -295,22 +306,48 @@ export default function Dashboard() {
               {invoicesLoading ? "جاري الجلب..." : "جلب البيانات"}
             </Button>
             {bonusData && (
-              <Button onClick={exportToExcel} variant="secondary">
-                تصدير Excel
-              </Button>
+              <>
+                <select
+                  value={selectedRep}
+                  onChange={(e) => setSelectedRep(e.target.value)}
+                  className="px-4 py-2 border rounded-md"
+                >
+                  <option value="all">جميع المناديب</option>
+                  {uniqueReps.map((rep: string) => (
+                    <option key={rep} value={rep}>
+                      {rep}
+                    </option>
+                  ))}
+                </select>
+                <Button onClick={exportToExcel} variant="secondary">
+                  تصدير Excel
+                </Button>
+              </>
             )}
           </div>
         </div>
 
         {/* Stats Cards */}
-        {bonusData && (
+        {bonusData && (() => {
+          const filteredInvoices = selectedRep === "all"
+            ? bonusData.paidInvoices
+            : bonusData.paidInvoices.filter((inv: any) => inv.rep === selectedRep);
+          
+          const filteredStats = {
+            totalSales: filteredInvoices.reduce((sum: number, inv: any) => sum + (inv.price * inv.quantity), 0),
+            sales1Percent: filteredInvoices.filter((inv: any) => inv.percentage === 1).reduce((sum: number, inv: any) => sum + (inv.price * inv.quantity), 0),
+            sales2Percent: filteredInvoices.filter((inv: any) => inv.percentage === 2).reduce((sum: number, inv: any) => sum + (inv.price * inv.quantity), 0),
+            totalBonus: filteredInvoices.reduce((sum: number, inv: any) => sum + inv.bonus, 0),
+          };
+
+          return (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-gray-600">إجمالي المبيعات</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{bonusData.totalSales.toLocaleString()} ريال</div>
+                <div className="text-3xl font-bold">{filteredStats.totalSales.toLocaleString()} ريال</div>
               </CardContent>
             </Card>
 
@@ -319,7 +356,7 @@ export default function Dashboard() {
                 <CardTitle className="text-sm font-medium text-orange-700">مبيعات 1% (أساسي)</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-orange-600">{bonusData.sales1Percent.toLocaleString()} ريال</div>
+                <div className="text-3xl font-bold text-orange-600">{filteredStats.sales1Percent.toLocaleString()} ريال</div>
               </CardContent>
             </Card>
 
@@ -328,7 +365,7 @@ export default function Dashboard() {
                 <CardTitle className="text-sm font-medium text-green-700">مبيعات 2% (تميز)</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-green-600">{bonusData.sales2Percent.toLocaleString()} ريال</div>
+                <div className="text-3xl font-bold text-green-600">{filteredStats.sales2Percent.toLocaleString()} ريال</div>
               </CardContent>
             </Card>
 
@@ -337,11 +374,12 @@ export default function Dashboard() {
                 <CardTitle className="text-sm font-medium text-blue-700">إجمالي البونص</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-blue-600">{bonusData.totalBonus.toLocaleString()} ريال</div>
+                <div className="text-3xl font-bold text-blue-600">{filteredStats.totalBonus.toLocaleString()} ريال</div>
               </CardContent>
             </Card>
           </div>
-        )}
+          );
+        })()}
 
         {/* Tabs */}
         <Tabs defaultValue="paid" className="w-full">
@@ -372,7 +410,7 @@ export default function Dashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {bonusData?.paidInvoices.map((inv, idx) => (
+                      {(selectedRep === "all" ? bonusData?.paidInvoices : bonusData?.paidInvoices.filter((inv: any) => inv.rep === selectedRep))?.map((inv: any, idx: number) => (
                         <tr key={idx} className="border-b hover:bg-gray-50">
                           <td className="p-2">{inv.reference}</td>
                           <td className="p-2">{inv.rep}</td>
