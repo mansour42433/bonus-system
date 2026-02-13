@@ -89,4 +89,62 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// Product Settings
+export async function getProductSettings() {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { productSettings } = await import("../drizzle/schema");
+  return await db.select().from(productSettings);
+}
+
+export async function upsertProductSetting(productId: string, productName: string, premiumPrice: number, basePrice: number) {
+  const db = await getDb();
+  if (!db) return;
+  
+  const { productSettings } = await import("../drizzle/schema");
+  
+  await db.insert(productSettings)
+    .values({
+      productId,
+      productName,
+      premiumPrice,
+      basePrice,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        productName,
+        premiumPrice,
+        basePrice,
+      },
+    });
+}
+
+// API Settings
+export async function getApiKey(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { apiSettings } = await import("../drizzle/schema");
+  const result = await db.select().from(apiSettings).where(eq(apiSettings.userId, userId)).limit(1);
+  
+  return result.length > 0 ? result[0]?.qoyodApiKey : null;
+}
+
+export async function saveApiKey(userId: number, qoyodApiKey: string) {
+  const db = await getDb();
+  if (!db) return;
+  
+  const { apiSettings } = await import("../drizzle/schema");
+  
+  await db.insert(apiSettings)
+    .values({
+      userId,
+      qoyodApiKey,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        qoyodApiKey,
+      },
+    });
+}

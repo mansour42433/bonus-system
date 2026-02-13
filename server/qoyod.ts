@@ -1,0 +1,144 @@
+/**
+ * Qoyod API Integration
+ * Handles fetching invoices and products from Qoyod API v2
+ */
+
+const QOYOD_API_BASE = "https://api.qoyod.com/2.0";
+
+export interface QoyodInvoice {
+  id: number;
+  reference: string;
+  issue_date: string;
+  status: string;
+  total: string;
+  created_by: string;
+  customer_name?: string;
+  line_items: Array<{
+    id: number;
+    product_id: number;
+    product_name: string;
+    quantity: number;
+    unit_price: number;
+    tax_percent: number;
+  }>;
+  payments?: Array<{
+    id: number;
+    date: string;
+    amount: string;
+  }>;
+  allocations?: Array<{
+    id: number;
+    amount: string;
+    date: string;
+    source_id: number;
+    source_type: string;
+  }>;
+}
+
+export interface QoyodProduct {
+  id: number;
+  name: string;
+  sku?: string;
+  price: number;
+}
+
+/**
+ * Fetch invoices from Qoyod API
+ * @param apiKey - Qoyod API key
+ * @param startDate - Start date (YYYY-MM-DD)
+ * @param endDate - End date (YYYY-MM-DD)
+ */
+export async function fetchQoyodInvoices(
+  apiKey: string,
+  startDate: string,
+  endDate: string
+): Promise<QoyodInvoice[]> {
+  const headers = {
+    "API-KEY": apiKey,
+    "Content-Type": "application/json",
+  };
+
+  // Fetch both Paid and Approved invoices
+  const url = `${QOYOD_API_BASE}/invoices?q[issue_date_gteq]=${startDate}&q[issue_date_lteq]=${endDate}&q[status_in][]=Paid&q[status_in][]=Approved`;
+
+  try {
+    const response = await fetch(url, { headers });
+    
+    if (!response.ok) {
+      throw new Error(`Qoyod API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.invoices || [];
+  } catch (error) {
+    console.error("[Qoyod] Failed to fetch invoices:", error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch products from Qoyod API
+ * @param apiKey - Qoyod API key
+ */
+export async function fetchQoyodProducts(apiKey: string): Promise<QoyodProduct[]> {
+  const headers = {
+    "API-KEY": apiKey,
+    "Content-Type": "application/json",
+  };
+
+  const url = `${QOYOD_API_BASE}/products`;
+
+  try {
+    const response = await fetch(url, { headers });
+    
+    if (!response.ok) {
+      throw new Error(`Qoyod API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.products || [];
+  } catch (error) {
+    console.error("[Qoyod] Failed to fetch products:", error);
+    throw error;
+  }
+}
+
+/**
+ * Calculate bonus for an invoice line item
+ * @param unitPrice - Unit price from Qoyod
+ * @param quantity - Quantity
+ * @param taxPercent - Tax percentage (usually 15)
+ * @param premiumPrice - Premium tier price threshold
+ * @param basePrice - Base tier price threshold
+ */
+export function calculateBonus(
+  unitPrice: number,
+  quantity: number,
+  taxPercent: number,
+  premiumPrice: number,
+  basePrice: number
+): { bonus: number; percentage: number; category: string; priceWithTax: number } {
+  // Calculate price with tax (15% VAT)
+  const priceWithTax = unitPrice * (1 + taxPercent / 100);
+
+  let percentage = 0;
+  let category = "لا بونص";
+
+  // Determine bonus percentage based on price
+  if (priceWithTax >= premiumPrice) {
+    percentage = 2;
+    category = "تميز";
+  } else if (priceWithTax <= basePrice) {
+    percentage = 1;
+    category = "أساسي";
+  }
+
+  const bonus = priceWithTax * quantity * (percentage / 100);
+
+  return {
+    bonus,
+    percentage,
+    category,
+    priceWithTax,
+  };
+}

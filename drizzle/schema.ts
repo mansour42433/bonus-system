@@ -25,4 +25,33 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+/**
+ * Product pricing settings for bonus calculation
+ * Stores premium (2%) and base (1%) price thresholds per product
+ */
+export const productSettings = mysqlTable("productSettings", {
+  id: int("id").autoincrement().primaryKey(),
+  productId: varchar("productId", { length: 128 }).notNull().unique(),
+  productName: text("productName"),
+  premiumPrice: int("premiumPrice").default(70).notNull(), // سعر التميز 2%
+  basePrice: int("basePrice").default(69).notNull(), // سعر الأساسي 1%
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ProductSetting = typeof productSettings.$inferSelect;
+export type InsertProductSetting = typeof productSettings.$inferInsert;
+
+/**
+ * API settings for Qoyod integration
+ */
+export const apiSettings = mysqlTable("apiSettings", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id),
+  qoyodApiKey: text("qoyodApiKey").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ApiSetting = typeof apiSettings.$inferSelect;
+export type InsertApiSetting = typeof apiSettings.$inferInsert;
