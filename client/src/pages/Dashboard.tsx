@@ -18,20 +18,6 @@ export default function Dashboard() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
 
-  // Get API key
-  const { data: apiKeyData } = trpc.qoyod.getApiKey.useQuery();
-  const [apiKey, setApiKey] = useState("");
-  
-  // Save API key mutation
-  const saveApiKeyMutation = trpc.qoyod.saveApiKey.useMutation({
-    onSuccess: () => {
-      toast.success("تم حفظ API Key بنجاح");
-    },
-    onError: (error) => {
-      toast.error(`خطأ: ${error.message}`);
-    },
-  });
-
   // Fetch invoices - get last 6 months to catch delayed invoices
   const [startDate, endDate] = (() => {
     const [year, month] = selectedMonth.split("-").map(Number);
@@ -44,14 +30,12 @@ export default function Dashboard() {
   })();
 
   const { data: invoicesData, isLoading: invoicesLoading, refetch } = trpc.qoyod.fetchInvoices.useQuery(
-    { startDate, endDate },
-    { enabled: !!apiKeyData?.apiKey }
+    { startDate, endDate }
   );
 
   // Fetch credit notes
   const { data: creditNotesData } = trpc.qoyod.fetchCreditNotes.useQuery(
-    { startDate, endDate },
-    { enabled: !!apiKeyData?.apiKey }
+    { startDate, endDate }
   );
 
   // Get product settings
@@ -355,37 +339,6 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {/* API Key Section */}
-        {!apiKeyData?.apiKey && (
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle>إعداد Qoyod API</CardTitle>
-              <CardDescription>أدخل مفتاح API الخاص بك من قيود</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <Label htmlFor="apiKey">API Key</Label>
-                  <Input
-                    id="apiKey"
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="أدخل API Key"
-                  />
-                </div>
-                <Button
-                  onClick={() => saveApiKeyMutation.mutate({ apiKey })}
-                  disabled={!apiKey || saveApiKeyMutation.isPending}
-                  className="self-end"
-                >
-                  {saveApiKeyMutation.isPending ? "جاري الحفظ..." : "حفظ"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Month Selector */}
         <div className="mb-8">
           <Label htmlFor="month">اختر الشهر</Label>
@@ -397,7 +350,7 @@ export default function Dashboard() {
               onChange={(e) => setSelectedMonth(e.target.value)}
               className="max-w-xs"
             />
-            <Button onClick={() => refetch()} disabled={invoicesLoading || !apiKeyData?.apiKey}>
+            <Button onClick={() => refetch()} disabled={invoicesLoading}>
               {invoicesLoading ? "جاري الجلب..." : "جلب البيانات"}
             </Button>
             {bonusData && (

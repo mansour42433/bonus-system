@@ -43,20 +43,6 @@ export type ProductSetting = typeof productSettings.$inferSelect;
 export type InsertProductSetting = typeof productSettings.$inferInsert;
 
 /**
- * API settings for Qoyod integration
- */
-export const apiSettings = mysqlTable("apiSettings", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull().references(() => users.id),
-  qoyodApiKey: text("qoyodApiKey").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
-
-export type ApiSetting = typeof apiSettings.$inferSelect;
-export type InsertApiSetting = typeof apiSettings.$inferInsert;
-
-/**
  * Representative (Sales Rep) settings
  * Stores nicknames, monthly targets, and bonus amounts per rep
  */

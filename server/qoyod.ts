@@ -3,6 +3,8 @@
  * Handles fetching invoices and products from Qoyod API v2
  */
 
+import { ENV } from "./_core/env";
+
 const QOYOD_API_BASE = "https://api.qoyod.com/2.0";
 
 export interface QoyodInvoice {
@@ -64,17 +66,15 @@ export interface QoyodCreditNote {
 
 /**
  * Fetch invoices from Qoyod API
- * @param apiKey - Qoyod API key
  * @param startDate - Start date (YYYY-MM-DD)
  * @param endDate - End date (YYYY-MM-DD)
  */
 export async function fetchQoyodInvoices(
-  apiKey: string,
   startDate: string,
   endDate: string
 ): Promise<QoyodInvoice[]> {
   const headers = {
-    "API-KEY": apiKey,
+    "API-KEY": ENV.qoyodApiKey,
     "Content-Type": "application/json",
   };
 
@@ -98,11 +98,10 @@ export async function fetchQoyodInvoices(
 
 /**
  * Fetch products from Qoyod API
- * @param apiKey - Qoyod API key
  */
-export async function fetchQoyodProducts(apiKey: string): Promise<QoyodProduct[]> {
+export async function fetchQoyodProducts(): Promise<QoyodProduct[]> {
   const headers = {
-    "API-KEY": apiKey,
+    "API-KEY": ENV.qoyodApiKey,
     "Content-Type": "application/json",
   };
 
@@ -125,17 +124,15 @@ export async function fetchQoyodProducts(apiKey: string): Promise<QoyodProduct[]
 
 /**
  * Fetch credit notes from Qoyod API
- * @param apiKey - Qoyod API key
  * @param startDate - Start date (YYYY-MM-DD)
  * @param endDate - End date (YYYY-MM-DD)
  */
 export async function fetchQoyodCreditNotes(
-  apiKey: string,
   startDate: string,
   endDate: string
 ): Promise<QoyodCreditNote[]> {
   const headers = {
-    "API-KEY": apiKey,
+    "API-KEY": ENV.qoyodApiKey,
     "Content-Type": "application/json",
   };
 

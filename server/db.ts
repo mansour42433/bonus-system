@@ -120,34 +120,6 @@ export async function upsertProductSetting(productId: string, productName: strin
     });
 }
 
-// API Settings
-export async function getApiKey(userId: number) {
-  const db = await getDb();
-  if (!db) return null;
-  
-  const { apiSettings } = await import("../drizzle/schema");
-  const result = await db.select().from(apiSettings).where(eq(apiSettings.userId, userId)).limit(1);
-  
-  return result.length > 0 ? result[0]?.qoyodApiKey : null;
-}
-
-export async function saveApiKey(userId: number, qoyodApiKey: string) {
-  const db = await getDb();
-  if (!db) return;
-  
-  const { apiSettings } = await import("../drizzle/schema");
-  
-  await db.insert(apiSettings)
-    .values({
-      userId,
-      qoyodApiKey,
-    })
-    .onDuplicateKeyUpdate({
-      set: {
-        qoyodApiKey,
-      },
-    });
-}
 
 // Rep Settings
 export async function getRepSettings() {

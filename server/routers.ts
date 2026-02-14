@@ -19,27 +19,6 @@ export const appRouter = router({
 
   // Qoyod Integration
   qoyod: router({
-    // Save API key
-    saveApiKey: protectedProcedure
-      .input((val: unknown) => {
-        if (typeof val === "object" && val !== null && "apiKey" in val && typeof val.apiKey === "string") {
-          return { apiKey: val.apiKey };
-        }
-        throw new Error("Invalid input: apiKey must be a string");
-      })
-      .mutation(async ({ ctx, input }) => {
-        const { saveApiKey } = await import("./db");
-        await saveApiKey(ctx.user.id, input.apiKey);
-        return { success: true };
-      }),
-
-    // Get API key
-    getApiKey: protectedProcedure.query(async ({ ctx }) => {
-      const { getApiKey } = await import("./db");
-      const apiKey = await getApiKey(ctx.user.id);
-      return { apiKey };
-    }),
-
     // Fetch invoices
     fetchInvoices: protectedProcedure
       .input((val: unknown) => {
@@ -56,15 +35,9 @@ export const appRouter = router({
         throw new Error("Invalid input: startDate and endDate must be strings");
       })
       .query(async ({ ctx, input }) => {
-        const { getApiKey } = await import("./db");
         const { fetchQoyodInvoices } = await import("./qoyod");
 
-        const apiKey = await getApiKey(ctx.user.id);
-        if (!apiKey) {
-          throw new Error("يجب حفظ Qoyod API Key أولاً");
-        }
-
-        const invoices = await fetchQoyodInvoices(apiKey, input.startDate, input.endDate);
+        const invoices = await fetchQoyodInvoices(input.startDate, input.endDate);
         return { invoices };
       }),
 
@@ -84,29 +57,17 @@ export const appRouter = router({
         throw new Error("Invalid input: startDate and endDate must be strings");
       })
       .query(async ({ ctx, input }) => {
-        const { getApiKey } = await import("./db");
         const { fetchQoyodCreditNotes } = await import("./qoyod");
 
-        const apiKey = await getApiKey(ctx.user.id);
-        if (!apiKey) {
-          throw new Error("يجب حفظ Qoyod API Key أولاً");
-        }
-
-        const creditNotes = await fetchQoyodCreditNotes(apiKey, input.startDate, input.endDate);
+        const creditNotes = await fetchQoyodCreditNotes(input.startDate, input.endDate);
         return { creditNotes };
       }),
 
     // Fetch products
     fetchProducts: protectedProcedure.query(async ({ ctx }) => {
-      const { getApiKey } = await import("./db");
       const { fetchQoyodProducts } = await import("./qoyod");
 
-      const apiKey = await getApiKey(ctx.user.id);
-      if (!apiKey) {
-        throw new Error("يجب حفظ Qoyod API Key أولاً");
-      }
-
-      const products = await fetchQoyodProducts(apiKey);
+      const products = await fetchQoyodProducts();
       return { products };
     }),
   }),
