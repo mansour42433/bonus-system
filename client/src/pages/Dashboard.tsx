@@ -108,13 +108,13 @@ export default function Dashboard() {
         const priceWithTax = item.unit_price * (1 + (item.tax_percent || 15) / 100);
         const itemTotal = priceWithTax * actualQuantity;
 
-        // Determine bonus percentage
+        // Determine bonus percentage based on settings
         let percentage = 0;
         let category = "لا بونص";
-        if (priceWithTax >= 70) {
+        if (priceWithTax >= premiumPrice) {
           percentage = 2;
           category = "تميز";
-        } else if (priceWithTax < 70) {
+        } else if (priceWithTax >= basePrice) {
           percentage = 1;
           category = "أساسي";
         }

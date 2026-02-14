@@ -175,16 +175,18 @@ export function calculateBonus(
   let percentage = 0;
   let category = "لا بونص";
 
-  // Determine bonus percentage based on price
+  // Determine bonus percentage based on unit price (not total)
   if (priceWithTax >= premiumPrice) {
     percentage = 2;
     category = "تميز";
-  } else if (priceWithTax <= basePrice) {
+  } else if (priceWithTax >= basePrice) {
     percentage = 1;
     category = "أساسي";
   }
 
-  const bonus = priceWithTax * quantity * (percentage / 100);
+  // Calculate bonus on total sales amount (price * quantity)
+  const totalSales = priceWithTax * quantity;
+  const bonus = totalSales * (percentage / 100);
 
   return {
     bonus,
