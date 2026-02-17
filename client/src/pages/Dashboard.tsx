@@ -18,10 +18,10 @@ export default function Dashboard() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
 
-  // Fetch invoices - get last 6 months to catch delayed invoices
+  // Fetch invoices for selected month only
   const [startDate, endDate] = (() => {
     const [year, month] = selectedMonth.split("-").map(Number);
-    const start = new Date(year, month - 6, 1); // 6 months back to catch all delayed invoices
+    const start = new Date(year, month - 1, 1); // First day of selected month
     const end = new Date(year, month, 0); // Last day of selected month
     return [
       start.toISOString().split("T")[0],

@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { int, mediumtext, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -66,7 +66,7 @@ export type InsertRepSetting = typeof repSettings.$inferInsert;
 export const qoyodCache = mysqlTable("qoyodCache", {
   id: int("id").autoincrement().primaryKey(),
   cacheKey: varchar("cacheKey", { length: 255 }).notNull().unique(), // e.g., "invoices_2026-02", "products", "creditNotes_2026-02"
-  cacheData: text("cacheData").notNull(), // TEXT to store large JSON
+  cacheData: mediumtext("cacheData").notNull(), // MEDIUMTEXT: up to 16MB
   expiresAt: timestamp("expiresAt").notNull(), // Cache expiration time
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

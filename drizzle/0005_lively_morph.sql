@@ -1,0 +1,1 @@
+ALTER TABLE `qoyodCache` MODIFY COLUMN `cacheData` mediumtext NOT NULL;
