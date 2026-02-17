@@ -9,7 +9,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import ExcelJS from "exceljs";
 import { Link } from "wouter";
-import { Settings } from "lucide-react";
+import { Settings, RefreshCw } from "lucide-react";
 
 export default function Dashboard() {
   const { user, loading: authLoading } = useAuth();
@@ -29,17 +29,19 @@ export default function Dashboard() {
     ];
   })();
 
-  const { data: invoicesData, isLoading: invoicesLoading, refetch } = trpc.qoyod.fetchInvoices.useQuery(
+  const { data: invoicesData, isLoading: invoicesLoading, refetch: refetchInvoices } = trpc.qoyod.fetchInvoices.useQuery(
     { startDate, endDate }
   );
+  
+  const clearCacheMutation = trpc.qoyod.clearCache.useMutation();
 
   // Fetch credit notes
-  const { data: creditNotesData } = trpc.qoyod.fetchCreditNotes.useQuery(
+  const { data: creditNotesData, refetch: refetchCreditNotes } = trpc.qoyod.fetchCreditNotes.useQuery(
     { startDate, endDate }
   );
 
   // Get product settings
-  const { data: settingsData } = trpc.settings.list.useQuery();
+  const { data: settingsData, refetch: refetchSettings } = trpc.settings.list.useQuery();
   
   // Get rep settings
   const { data: repsData } = trpc.reps.list.useQuery();
@@ -319,7 +321,14 @@ export default function Dashboard() {
   };
 
   if (authLoading) {
-    return <div className="flex items-center justify-center min-h-screen">جاري التحميل...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">جاري التحميل...</p>
+        </div>
+      </div>
+    );
   }
 
   if (!user) {
@@ -350,8 +359,25 @@ export default function Dashboard() {
               onChange={(e) => setSelectedMonth(e.target.value)}
               className="max-w-xs"
             />
-            <Button onClick={() => refetch()} disabled={invoicesLoading}>
-              {invoicesLoading ? "جاري الجلب..." : "جلب البيانات"}
+            <Button 
+              onClick={async () => {
+                try {
+                  await clearCacheMutation.mutateAsync();
+                  await Promise.all([
+                    refetchInvoices(),
+                    refetchCreditNotes(),
+                    refetchSettings()
+                  ]);
+                  toast.success("تم تحديث البيانات بنجاح");
+                } catch (error) {
+                  toast.error("فشل تحديث البيانات");
+                }
+              }} 
+              disabled={invoicesLoading || clearCacheMutation.isPending}
+              variant="outline"
+            >
+              <RefreshCw className={`ml-2 h-4 w-4 ${clearCacheMutation.isPending ? 'animate-spin' : ''}`} />
+              {clearCacheMutation.isPending ? "جاري التحديث..." : "تحديث البيانات"}
             </Button>
             {bonusData && (
               <>
@@ -442,6 +468,18 @@ export default function Dashboard() {
                 <CardTitle>الفواتير المدفوعة</CardTitle>
               </CardHeader>
               <CardContent>
+                {invoicesLoading ? (
+                  <div className="space-y-3">
+                    {[...Array(5)].map((_, i) => (
+                      <div key={i} className="animate-pulse flex space-x-4">
+                        <div className="flex-1 space-y-2 py-1">
+                          <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                          <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -486,6 +524,7 @@ export default function Dashboard() {
                     </tbody>
                   </table>
                 </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

@@ -53,7 +53,7 @@ function RepSettingsSection() {
           لا توجد فواتير بعد. سيتم عرض المناديب بعد جلب الفواتير.
         </div>
       ) : (
-        uniqueReps.map((repEmail: string) => {
+        (uniqueReps as string[]).map((repEmail: string) => {
           const repSetting = repsData?.reps.find((r) => r.repEmail === repEmail);
           const isEditing = editingRep?.repEmail === repEmail;
 

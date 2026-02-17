@@ -156,3 +156,79 @@ export async function upsertRepSetting(
       },
     });
 }
+
+
+// Qoyod Cache Functions
+export async function getCachedData(cacheKey: string) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { qoyodCache } = await import("../drizzle/schema");
+  
+  const result = await db
+    .select()
+    .from(qoyodCache)
+    .where(eq(qoyodCache.cacheKey, cacheKey))
+    .limit(1);
+  
+  if (result.length === 0) return null;
+  
+  const cache = result[0];
+  
+  // Check if cache is expired
+  if (new Date() > cache.expiresAt) {
+    // Delete expired cache
+    await db.delete(qoyodCache).where(eq(qoyodCache.cacheKey, cacheKey));
+    return null;
+  }
+  
+  try {
+    return JSON.parse(cache.cacheData);
+  } catch (error) {
+    console.error("[Cache] Failed to parse cache data:", error);
+    return null;
+  }
+}
+
+export async function setCachedData(cacheKey: string, data: any, ttlSeconds: number = 3600) {
+  const db = await getDb();
+  if (!db) return;
+  
+  const { qoyodCache } = await import("../drizzle/schema");
+  
+  const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
+  const cacheData = JSON.stringify(data);
+  
+  await db.insert(qoyodCache)
+    .values({
+      cacheKey,
+      cacheData,
+      expiresAt,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        cacheData,
+        expiresAt,
+      },
+    });
+}
+
+export async function clearCache(cacheKeyPattern?: string) {
+  const db = await getDb();
+  if (!db) return;
+  
+  const { qoyodCache } = await import("../drizzle/schema");
+  
+  if (cacheKeyPattern) {
+    // Clear specific cache pattern (e.g., "invoices_*")
+    const allCache = await db.select().from(qoyodCache);
+    const toDelete = allCache.filter(c => c.cacheKey.startsWith(cacheKeyPattern.replace('*', '')));
+    
+    for (const cache of toDelete) {
+      await db.delete(qoyodCache).where(eq(qoyodCache.cacheKey, cache.cacheKey));
+    }
+  } else {
+    // Clear all cache
+    await db.delete(qoyodCache);
+  }
+}

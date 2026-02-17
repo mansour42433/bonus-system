@@ -35,9 +35,26 @@ export const appRouter = router({
         throw new Error("Invalid input: startDate and endDate must be strings");
       })
       .query(async ({ ctx, input }) => {
+        const { getCachedData, setCachedData } = await import("./db");
         const { fetchQoyodInvoices } = await import("./qoyod");
 
+        // Generate cache key based on date range
+        const cacheKey = `invoices_${input.startDate}_${input.endDate}`;
+        
+        // Try to get cached data
+        const cachedData = await getCachedData(cacheKey);
+        if (cachedData) {
+          console.log(`[Cache] Using cached invoices for ${cacheKey}`);
+          return { invoices: cachedData };
+        }
+
+        // Fetch fresh data from Qoyod
+        console.log(`[Cache] Fetching fresh invoices for ${cacheKey}`);
         const invoices = await fetchQoyodInvoices(input.startDate, input.endDate);
+        
+        // Cache the data for 1 hour
+        await setCachedData(cacheKey, invoices, 3600);
+        
         return { invoices };
       }),
 
@@ -57,18 +74,58 @@ export const appRouter = router({
         throw new Error("Invalid input: startDate and endDate must be strings");
       })
       .query(async ({ ctx, input }) => {
+        const { getCachedData, setCachedData } = await import("./db");
         const { fetchQoyodCreditNotes } = await import("./qoyod");
 
+        // Generate cache key based on date range
+        const cacheKey = `creditNotes_${input.startDate}_${input.endDate}`;
+        
+        // Try to get cached data
+        const cachedData = await getCachedData(cacheKey);
+        if (cachedData) {
+          console.log(`[Cache] Using cached credit notes for ${cacheKey}`);
+          return { creditNotes: cachedData };
+        }
+
+        // Fetch fresh data from Qoyod
+        console.log(`[Cache] Fetching fresh credit notes for ${cacheKey}`);
         const creditNotes = await fetchQoyodCreditNotes(input.startDate, input.endDate);
+        
+        // Cache the data for 1 hour
+        await setCachedData(cacheKey, creditNotes, 3600);
+        
         return { creditNotes };
       }),
 
     // Fetch products
     fetchProducts: protectedProcedure.query(async ({ ctx }) => {
+      const { getCachedData, setCachedData } = await import("./db");
       const { fetchQoyodProducts } = await import("./qoyod");
 
+      const cacheKey = "products";
+      
+      // Try to get cached data
+      const cachedData = await getCachedData(cacheKey);
+      if (cachedData) {
+        console.log("[Cache] Using cached products");
+        return { products: cachedData };
+      }
+
+      // Fetch fresh data from Qoyod
+      console.log("[Cache] Fetching fresh products");
       const products = await fetchQoyodProducts();
+      
+      // Cache the data for 1 hour
+      await setCachedData(cacheKey, products, 3600);
+      
       return { products };
+    }),
+
+    // Clear cache manually
+    clearCache: protectedProcedure.mutation(async () => {
+      const { clearCache } = await import("./db");
+      await clearCache();
+      return { success: true };
     }),
   }),
 

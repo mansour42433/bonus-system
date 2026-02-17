@@ -58,3 +58,19 @@ export const repSettings = mysqlTable("repSettings", {
 
 export type RepSetting = typeof repSettings.$inferSelect;
 export type InsertRepSetting = typeof repSettings.$inferInsert;
+/**
+ * Qoyod API Cache table
+ * Stores cached data from Qoyod API to improve performance
+ * Cache expires after 1 hour (3600 seconds)
+ */
+export const qoyodCache = mysqlTable("qoyodCache", {
+  id: int("id").autoincrement().primaryKey(),
+  cacheKey: varchar("cacheKey", { length: 255 }).notNull().unique(), // e.g., "invoices_2026-02", "products", "creditNotes_2026-02"
+  cacheData: text("cacheData").notNull(), // TEXT to store large JSON
+  expiresAt: timestamp("expiresAt").notNull(), // Cache expiration time
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type QoyodCache = typeof qoyodCache.$inferSelect;
+export type InsertQoyodCache = typeof qoyodCache.$inferInsert;
