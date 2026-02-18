@@ -47,6 +47,22 @@ export interface QoyodProduct {
   buying_price?: string;
 }
 
+export interface QoyodInvoicePayment {
+  id: number;
+  reference: string;
+  date: string;
+  amount: string;
+  invoice_id: number;
+  description?: string;
+  allocations?: Array<{
+    id: number;
+    amount: string;
+    date: string;
+    source_id: number;
+    source_type: string; // "CreditNote" for credit notes
+  }>;
+}
+
 export interface QoyodCreditNote {
   id: number;
   reference: string;
@@ -123,6 +139,37 @@ export async function fetchQoyodProducts(): Promise<QoyodProduct[]> {
 }
 
 /**
+ * Fetch invoice payments from Qoyod API
+ * @param startDate - Start date (YYYY-MM-DD)
+ * @param endDate - End date (YYYY-MM-DD)
+ */
+export async function fetchQoyodInvoicePayments(
+  startDate: string,
+  endDate: string
+): Promise<QoyodInvoicePayment[]> {
+  const headers = {
+    "API-KEY": ENV.qoyodApiKey,
+    "Content-Type": "application/json",
+  };
+
+  const url = `${QOYOD_API_BASE}/invoice_payments?q[date_gteq]=${startDate}&q[date_lteq]=${endDate}`;
+
+  try {
+    const response = await fetch(url, { headers });
+    
+    if (!response.ok) {
+      throw new Error(`Qoyod API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.receipts || [];
+  } catch (error) {
+    console.error("[Qoyod] Failed to fetch invoice payments:", error);
+    throw error;
+  }
+}
+
+/**
  * Fetch credit notes from Qoyod API
  * @param startDate - Start date (YYYY-MM-DD)
  * @param endDate - End date (YYYY-MM-DD)
@@ -146,7 +193,14 @@ export async function fetchQoyodCreditNotes(
     }
 
     const data = await response.json();
-    return data.credit_notes || [];
+    const creditNotes = data.credit_notes || [];
+    
+    // Log first credit note to check structure
+    if (creditNotes.length > 0) {
+      console.log('[Qoyod] Credit Note Sample:', JSON.stringify(creditNotes[0], null, 2));
+    }
+    
+    return creditNotes;
   } catch (error) {
     console.error("[Qoyod] Failed to fetch credit notes:", error);
     // Return empty array if credit notes endpoint doesn't exist

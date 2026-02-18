@@ -40,6 +40,11 @@ export default function Dashboard() {
     { startDate, endDate }
   );
 
+  // Fetch invoice payments
+  const { data: paymentsData, refetch: refetchPayments } = trpc.qoyod.fetchInvoicePayments.useQuery(
+    { startDate, endDate }
+  );
+
   // Get product settings
   const { data: settingsData, refetch: refetchSettings } = trpc.settings.list.useQuery();
   
@@ -53,13 +58,38 @@ export default function Dashboard() {
     const invoices = invoicesData.invoices;
     const settings = settingsData.settings;
     const creditNotes = creditNotesData?.creditNotes || [];
+    const payments = paymentsData?.payments || [];
+
+    // Build a map of payment dates by invoice_id
+    const paymentDates = new Map<number, string>();
+    payments.forEach((payment: any) => {
+      if (payment.invoice_id && payment.date) {
+        // Store the latest payment date for each invoice
+        const existing = paymentDates.get(payment.invoice_id);
+        if (!existing || payment.date > existing) {
+          paymentDates.set(payment.invoice_id, payment.date);
+        }
+      }
+    });
+
+    // Build a map of credit note IDs to invoice IDs using allocations from payments
+    const creditNoteToInvoice = new Map<number, number>();
+    payments.forEach((payment: any) => {
+      payment.allocations?.forEach((allocation: any) => {
+        if (allocation.source_type === "CreditNote") {
+          creditNoteToInvoice.set(allocation.source_id, payment.invoice_id);
+        }
+      });
+    });
 
     // Build a map of returned quantities by invoice_id and product_id
     const returnedQuantities = new Map<string, number>();
     creditNotes.forEach((cn: any) => {
-      if (cn.invoice_id) {
+      // Get invoice_id from allocations map
+      const invoiceId = creditNoteToInvoice.get(cn.id);
+      if (invoiceId) {
         cn.line_items?.forEach((item: any) => {
-          const key = `${cn.invoice_id}-${item.product_id}`;
+          const key = `${invoiceId}-${item.product_id}`;
           const existing = returnedQuantities.get(key) || 0;
           returnedQuantities.set(key, existing + item.quantity);
         });
@@ -79,9 +109,11 @@ export default function Dashboard() {
     invoices.forEach((invoice: any) => {
       const isPaid = invoice.status === "Paid";
       
-      // Get payment date from payments array
-      const paymentDate = invoice.payments?.[invoice.payments.length - 1]?.date;
-      if (!paymentDate && isPaid) return; // Skip if paid but no payment date
+      // Get payment date from paymentsData
+      const paymentDate = paymentDates.get(invoice.id);
+      
+      // Skip if paid but no payment date found
+      if (isPaid && !paymentDate) return;
       
       // Check if payment was made in selected month
       let isInSelectedMonth = false;
@@ -141,7 +173,7 @@ export default function Dashboard() {
             category,
             percentage,
             bonus,
-            date: invoice.payments?.[invoice.payments.length - 1]?.date || invoice.issue_date,
+            date: paymentDate || invoice.issue_date,
           });
         } else {
           pendingInvoices.push({
@@ -366,8 +398,9 @@ export default function Dashboard() {
                 try {
                   await clearCacheMutation.mutateAsync();
                   await Promise.all([
-                    refetchInvoices(),
-                    refetchCreditNotes(),
+                  refetchInvoices(),
+                  refetchCreditNotes(),
+                  refetchPayments(),
                     refetchSettings()
                   ]);
                   toast.success("تم تحديث البيانات بنجاح");

@@ -97,6 +97,45 @@ export const appRouter = router({
         return { creditNotes };
       }),
 
+    // Fetch invoice payments
+    fetchInvoicePayments: protectedProcedure
+      .input((val: unknown) => {
+        if (
+          typeof val === "object" &&
+          val !== null &&
+          "startDate" in val &&
+          "endDate" in val &&
+          typeof val.startDate === "string" &&
+          typeof val.endDate === "string"
+        ) {
+          return { startDate: val.startDate, endDate: val.endDate };
+        }
+        throw new Error("Invalid input: startDate and endDate must be strings");
+      })
+      .query(async ({ ctx, input }) => {
+        const { getCachedData, setCachedData } = await import("./db");
+        const { fetchQoyodInvoicePayments } = await import("./qoyod");
+
+        // Generate cache key based on date range
+        const cacheKey = `invoicePayments_${input.startDate}_${input.endDate}`;
+        
+        // Try to get cached data
+        const cachedData = await getCachedData(cacheKey);
+        if (cachedData) {
+          console.log(`[Cache] Using cached invoice payments for ${cacheKey}`);
+          return { payments: cachedData };
+        }
+
+        // Fetch fresh data from Qoyod
+        console.log(`[Cache] Fetching fresh invoice payments for ${cacheKey}`);
+        const payments = await fetchQoyodInvoicePayments(input.startDate, input.endDate);
+        
+        // Cache the data for 1 hour
+        await setCachedData(cacheKey, payments, 3600);
+        
+        return { payments };
+      }),
+
     // Fetch products
     fetchProducts: protectedProcedure.query(async ({ ctx }) => {
       const { getCachedData, setCachedData } = await import("./db");
