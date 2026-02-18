@@ -61,15 +61,19 @@ export default function Dashboard() {
     const creditNotes = creditNotesData?.creditNotes || [];
     const payments = paymentsData?.payments || [];
 
-    // Build a map of payment dates by invoice_id
+    // Build a map of payment dates by invoice_id (extract from allocations)
     const paymentDates = new Map<number, string>();
     payments.forEach((payment: any) => {
-      if (payment.invoice_id && payment.date) {
-        // Store the latest payment date for each invoice
-        const existing = paymentDates.get(payment.invoice_id);
-        if (!existing || payment.date > existing) {
-          paymentDates.set(payment.invoice_id, payment.date);
-        }
+      if (payment.allocations && Array.isArray(payment.allocations)) {
+        payment.allocations.forEach((allocation: any) => {
+          if (allocation.allocatee_type === "Invoice" && allocation.allocatee_id && payment.date) {
+            // Store the latest payment date for each invoice
+            const existing = paymentDates.get(allocation.allocatee_id);
+            if (!existing || payment.date > existing) {
+              paymentDates.set(allocation.allocatee_id, payment.date);
+            }
+          }
+        });
       }
     });
 
@@ -77,8 +81,8 @@ export default function Dashboard() {
     const creditNoteToInvoice = new Map<number, number>();
     payments.forEach((payment: any) => {
       payment.allocations?.forEach((allocation: any) => {
-        if (allocation.source_type === "CreditNote") {
-          creditNoteToInvoice.set(allocation.source_id, payment.invoice_id);
+        if (allocation.source_type === "CreditNote" && allocation.allocatee_type === "Invoice") {
+          creditNoteToInvoice.set(allocation.source_id, allocation.allocatee_id);
         }
       });
     });

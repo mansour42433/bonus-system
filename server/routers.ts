@@ -168,15 +168,24 @@ export const appRouter = router({
         // Fetch invoice payments from the selected month
         console.log(`[Cache] Fetching invoices by payment date for ${cacheKey}`);
         const payments = await fetchQoyodInvoicePayments(input.startDate, input.endDate);
+        console.log(`[Debug] Found ${payments.length} payments`);
+        if (payments.length > 0) {
+          console.log(`[Debug] First payment sample:`, JSON.stringify(payments[0], null, 2));
+        }
         
-        // Extract unique invoice IDs and group by invoice_id to get latest payment date
+        // Extract unique invoice IDs from allocations and group by invoice_id to get latest payment date
         const invoicePaymentDates = new Map<number, string>();
         payments.forEach((payment: any) => {
-          if (payment.invoice_id && payment.date) {
-            const existing = invoicePaymentDates.get(payment.invoice_id);
-            if (!existing || payment.date > existing) {
-              invoicePaymentDates.set(payment.invoice_id, payment.date);
-            }
+          // invoice_id is allocatee_id when allocatee_type is "Invoice"
+          if (payment.allocations && Array.isArray(payment.allocations)) {
+            payment.allocations.forEach((allocation: any) => {
+              if (allocation.allocatee_type === "Invoice" && allocation.allocatee_id && payment.date) {
+                const existing = invoicePaymentDates.get(allocation.allocatee_id);
+                if (!existing || payment.date > existing) {
+                  invoicePaymentDates.set(allocation.allocatee_id, payment.date);
+                }
+              }
+            });
           }
         });
 

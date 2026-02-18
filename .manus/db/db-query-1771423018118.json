@@ -1,0 +1,9 @@
+{
+  "query": "DELETE FROM qoyodCache WHERE cacheKey LIKE 'invoicesByPaymentDate%';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2Kt54zKDUXrhJ93.8bb656e63664 --database foemZFf6hfhh42o3XSy4Gv --execute DELETE FROM qoyodCache WHERE cacheKey LIKE 'invoicesByPaymentDate%';",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1511
+}

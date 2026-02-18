@@ -134,3 +134,14 @@
 - [x] السبب: النظام يجلب الفواتير حسب `issue_date` ثم يصفيها حسب `payment_date`
 - [x] المشكلة: الفواتير التي صدرت في شهر آخر لكن دُفعت في الشهر المحدد لا تظهر
 - [x] الحل: جلب invoice_id من Invoice Payments أولاً، ثم جلب الفواتير المرتبطة بهذه الـ IDs
+
+## مشكلة استخراج invoice_id - 18 فبراير 2026 (الليل)
+- [x] الكود يحاول الوصول لـ `payment.invoice_id` مباشرة لكنه غير موجود
+- [x] invoice_id موجود داخل `payment.allocations[].invoice_id`
+- [x] تحديث fetchInvoicesByPaymentDate لاستخراج invoice_id من allocations
+
+## مشكلة عرض البيانات في Dashboard - 18 فبراير 2026 (الليل المتأخر)
+- [x] Dashboard.tsx يستخدم `payment.invoice_id` مباشرة لكنه غير موجود
+- [x] تحديث Dashboard.tsx لاستخراج invoice_id من allocations
+- [x] اختبار النظام والتأكد من ظهور جميع البيانات بشكل صحيح
+- [x] النظام يعمل بنجاح: 101 فاتورة، 105,490 ريال مبيعات، 1,294 ريال بونص
