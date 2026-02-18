@@ -136,6 +136,66 @@ export const appRouter = router({
         return { payments };
       }),
 
+    // Fetch invoices by payment date (new logic)
+    fetchInvoicesByPaymentDate: protectedProcedure
+      .input((val: unknown) => {
+        if (
+          typeof val === "object" &&
+          val !== null &&
+          "startDate" in val &&
+          "endDate" in val &&
+          typeof val.startDate === "string" &&
+          typeof val.endDate === "string"
+        ) {
+          return { startDate: val.startDate, endDate: val.endDate };
+        }
+        throw new Error("Invalid input: startDate and endDate must be strings");
+      })
+      .query(async ({ ctx, input }) => {
+        const { getCachedData, setCachedData } = await import("./db");
+        const { fetchQoyodInvoicePayments, fetchQoyodInvoicesByIds } = await import("./qoyod");
+
+        // Generate cache key based on date range
+        const cacheKey = `invoicesByPaymentDate_${input.startDate}_${input.endDate}`;
+        
+        // Try to get cached data
+        const cachedData = await getCachedData(cacheKey);
+        if (cachedData) {
+          console.log(`[Cache] Using cached invoices by payment date for ${cacheKey}`);
+          return { invoices: cachedData };
+        }
+
+        // Fetch invoice payments from the selected month
+        console.log(`[Cache] Fetching invoices by payment date for ${cacheKey}`);
+        const payments = await fetchQoyodInvoicePayments(input.startDate, input.endDate);
+        
+        // Extract unique invoice IDs and group by invoice_id to get latest payment date
+        const invoicePaymentDates = new Map<number, string>();
+        payments.forEach((payment: any) => {
+          if (payment.invoice_id && payment.date) {
+            const existing = invoicePaymentDates.get(payment.invoice_id);
+            if (!existing || payment.date > existing) {
+              invoicePaymentDates.set(payment.invoice_id, payment.date);
+            }
+          }
+        });
+
+        const invoiceIds = Array.from(invoicePaymentDates.keys());
+        console.log(`[Qoyod] Found ${invoiceIds.length} invoices with payments in selected period`);
+
+        // Fetch invoices by IDs
+        const invoices = await fetchQoyodInvoicesByIds(invoiceIds);
+        
+        // Filter only Paid invoices
+        const paidInvoices = invoices.filter((inv: any) => inv.status === "Paid");
+        console.log(`[Qoyod] Filtered to ${paidInvoices.length} Paid invoices`);
+        
+        // Cache the data for 1 hour
+        await setCachedData(cacheKey, paidInvoices, 3600);
+        
+        return { invoices: paidInvoices };
+      }),
+
     // Fetch products
     fetchProducts: protectedProcedure.query(async ({ ctx }) => {
       const { getCachedData, setCachedData } = await import("./db");

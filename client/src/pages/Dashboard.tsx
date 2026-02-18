@@ -29,7 +29,8 @@ export default function Dashboard() {
     ];
   })();
 
-  const { data: invoicesData, isLoading: invoicesLoading, refetch: refetchInvoices } = trpc.qoyod.fetchInvoices.useQuery(
+  // Use new endpoint that fetches invoices by payment date
+  const { data: invoicesData, isLoading: invoicesLoading, refetch: refetchInvoices } = trpc.qoyod.fetchInvoicesByPaymentDate.useQuery(
     { startDate, endDate }
   );
   

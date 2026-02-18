@@ -113,6 +113,47 @@ export async function fetchQoyodInvoices(
 }
 
 /**
+ * Fetch specific invoices by IDs from Qoyod API
+ * @param invoiceIds - Array of invoice IDs
+ */
+export async function fetchQoyodInvoicesByIds(
+  invoiceIds: number[]
+): Promise<QoyodInvoice[]> {
+  if (invoiceIds.length === 0) return [];
+
+  const headers = {
+    "API-KEY": ENV.qoyodApiKey,
+    "Content-Type": "application/json",
+  };
+
+  // Fetch invoices in batches (Qoyod API might have limits)
+  const batchSize = 50;
+  const invoices: QoyodInvoice[] = [];
+
+  for (let i = 0; i < invoiceIds.length; i += batchSize) {
+    const batch = invoiceIds.slice(i, i + batchSize);
+    const idsParam = batch.map(id => `q[id_in][]=${id}`).join("&");
+    const url = `${QOYOD_API_BASE}/invoices?${idsParam}`;
+
+    try {
+      const response = await fetch(url, { headers });
+      
+      if (!response.ok) {
+        throw new Error(`Qoyod API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      invoices.push(...(data.invoices || []));
+    } catch (error) {
+      console.error("[Qoyod] Failed to fetch invoices by IDs:", error);
+      throw error;
+    }
+  }
+
+  return invoices;
+}
+
+/**
  * Fetch products from Qoyod API
  */
 export async function fetchQoyodProducts(): Promise<QoyodProduct[]> {
