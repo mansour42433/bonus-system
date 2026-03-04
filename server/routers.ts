@@ -266,17 +266,21 @@ export const appRouter = router({
             productName: val.productName,
             premiumPrice: val.premiumPrice,
             basePrice: val.basePrice,
+            bonus1Enabled: "bonus1Enabled" in val ? Boolean(val.bonus1Enabled) : true,
+            bonus2Enabled: "bonus2Enabled" in val ? Boolean(val.bonus2Enabled) : true,
           };
         }
         throw new Error("Invalid input for product update");
       })
-      .mutation(async ({ input }: { input: { productId: string; productName: string; premiumPrice: number; basePrice: number } }) => {
+      .mutation(async ({ input }: { input: { productId: string; productName: string; premiumPrice: number; basePrice: number; bonus1Enabled: boolean; bonus2Enabled: boolean } }) => {
         const { upsertProductSetting } = await import("./db");
         await upsertProductSetting(
           input.productId,
           input.productName,
           input.premiumPrice,
-          input.basePrice
+          input.basePrice,
+          input.bonus1Enabled,
+          input.bonus2Enabled
         );
         return { success: true };
       }),

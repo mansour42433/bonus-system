@@ -1,0 +1,74 @@
+{
+  "query": "SELECT productId, productName, premiumPrice, basePrice, bonus1Enabled, bonus2Enabled FROM productSettings WHERE productId IN ('149','154','148','150','151','152','153','155') ORDER BY productId;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2Kt54zKDUXrhJ93.8bb656e63664 --database foemZFf6hfhh42o3XSy4Gv --execute SELECT productId, productName, premiumPrice, basePrice, bonus1Enabled, bonus2Enabled FROM productSettings WHERE productId IN ('149','154','148','150','151','152','153','155') ORDER BY productId;",
+  "rows": [
+    {
+      "productId": "148",
+      "productName": "رول تسعير",
+      "premiumPrice": "126",
+      "basePrice": "125",
+      "bonus1Enabled": "1",
+      "bonus2Enabled": "1"
+    },
+    {
+      "productId": "149",
+      "productName": "رول تاريخ",
+      "premiumPrice": "75",
+      "basePrice": "74",
+      "bonus1Enabled": "1",
+      "bonus2Enabled": "1"
+    },
+    {
+      "productId": "150",
+      "productName": "ورق كاشير 80*70",
+      "premiumPrice": "69",
+      "basePrice": "68",
+      "bonus1Enabled": "1",
+      "bonus2Enabled": "1"
+    },
+    {
+      "productId": "151",
+      "productName": "ورق باركود 22*40",
+      "premiumPrice": "251",
+      "basePrice": "250",
+      "bonus1Enabled": "1",
+      "bonus2Enabled": "1"
+    },
+    {
+      "productId": "152",
+      "productName": "ورق باركود 50*75",
+      "premiumPrice": "461",
+      "basePrice": "460",
+      "bonus1Enabled": "1",
+      "bonus2Enabled": "1"
+    },
+    {
+      "productId": "153",
+      "productName": "باركود 150*100",
+      "premiumPrice": "331",
+      "basePrice": "330",
+      "bonus1Enabled": "1",
+      "bonus2Enabled": "1"
+    },
+    {
+      "productId": "154",
+      "productName": "باركود 60*40",
+      "premiumPrice": "251",
+      "basePrice": "250",
+      "bonus1Enabled": "1",
+      "bonus2Enabled": "1"
+    },
+    {
+      "productId": "155",
+      "productName": " ورق باركود 38*28",
+      "premiumPrice": "251",
+      "basePrice": "250",
+      "bonus1Enabled": "1",
+      "bonus2Enabled": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "productId\tproductName\tpremiumPrice\tbasePrice\tbonus1Enabled\tbonus2Enabled\n148\tرول تسعير\t126\t125\t1\t1\n149\tرول تاريخ\t75\t74\t1\t1\n150\tورق كاشير 80*70\t69\t68\t1\t1\n151\tورق باركود 22*40\t251\t250\t1\t1\n152\tورق باركود 50*75\t461\t460\t1\t1\n153\tباركود 150*100\t331\t330\t1\t1\n154\tباركود 60*40\t251\t250\t1\t1\n155\t ورق باركود 38*28\t251\t250\t1\t1\n",
+  "stderr": "",
+  "execution_time_ms": 1614
+}

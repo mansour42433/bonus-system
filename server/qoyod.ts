@@ -254,15 +254,19 @@ export async function fetchQoyodCreditNotes(
  * @param unitPrice - Unit price from Qoyod
  * @param quantity - Quantity
  * @param taxPercent - Tax percentage (usually 15)
- * @param premiumPrice - Premium tier price threshold
- * @param basePrice - Base tier price threshold
+ * @param premiumPrice - Premium tier price threshold (>= this → 2%)
+ * @param basePrice - (deprecated, kept for backward compat) not used in new logic
+ * @param bonus1Enabled - Whether 1% bonus is enabled (default: true)
+ * @param bonus2Enabled - Whether 2% bonus is enabled (default: true)
  */
 export function calculateBonus(
   unitPrice: number,
   quantity: number,
   taxPercent: number,
   premiumPrice: number,
-  basePrice: number
+  basePrice: number,
+  bonus1Enabled: boolean = true,
+  bonus2Enabled: boolean = true
 ): { bonus: number; percentage: number; category: string; priceWithTax: number } {
   // Calculate price with tax (15% VAT)
   const priceWithTax = unitPrice * (1 + taxPercent / 100);
@@ -270,13 +274,20 @@ export function calculateBonus(
   let percentage = 0;
   let category = "لا بونص";
 
-  // Determine bonus percentage based on unit price (not total)
-  if (priceWithTax >= premiumPrice) {
-    percentage = 2;
-    category = "تميز";
-  } else if (priceWithTax >= basePrice) {
-    percentage = 1;
-    category = "أساسي";
+  // New logic: premiumPrice is the single threshold
+  // >= premiumPrice → 2% (if enabled), < premiumPrice → 1% (if enabled)
+  if (priceWithTax > 0) {
+    if (priceWithTax >= premiumPrice && bonus2Enabled) {
+      percentage = 2;
+      category = "تميز";
+    } else if (priceWithTax >= premiumPrice && !bonus2Enabled && bonus1Enabled) {
+      // 2% disabled, fall back to 1%
+      percentage = 1;
+      category = "أساسي";
+    } else if (priceWithTax < premiumPrice && bonus1Enabled) {
+      percentage = 1;
+      category = "أساسي";
+    }
   }
 
   // Calculate bonus on total sales amount (price * quantity)

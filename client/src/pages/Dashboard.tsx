@@ -20,9 +20,20 @@ export default function Dashboard() {
 
   // Fetch invoices for selected month only
   const [startDate, endDate] = (() => {
-    const [year, month] = selectedMonth.split("-").map(Number);
-    const start = new Date(year, month - 1, 1); // First day of selected month
-    const end = new Date(year, month, 0); // Last day of selected month
+    const parts = selectedMonth ? selectedMonth.split("-").map(Number) : [];
+    const year = parts[0] || new Date().getFullYear();
+    const month = parts[1] || (new Date().getMonth() + 1);
+    if (!year || !month || isNaN(year) || isNaN(month)) {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = now.getMonth() + 1;
+      return [
+        `${y}-${String(m).padStart(2, "0")}-01`,
+        `${y}-${String(m).padStart(2, "0")}-${new Date(y, m, 0).getDate()}`,
+      ];
+    }
+    const start = new Date(year, month - 1, 1);
+    const end = new Date(year, month, 0);
     return [
       start.toISOString().split("T")[0],
       end.toISOString().split("T")[0],
@@ -132,8 +143,8 @@ export default function Dashboard() {
       
       invoice.line_items?.forEach((item: any) => {
         const setting = settings.find((s) => String(s.productId) === String(item.product_id));
-        const premiumPrice = setting?.premiumPrice || 70;
-        const basePrice = setting?.basePrice || 69;
+        // Default: premiumPrice=70 (threshold for 2%), any price > 0 and < 70 gets 1% automatically
+        const premiumPrice = setting?.premiumPrice ?? 70;
 
         // Check for returned quantities
         const returnKey = `${invoice.id}-${item.product_id}`;
@@ -148,16 +159,25 @@ export default function Dashboard() {
         const itemTotal = priceWithTax * actualQuantity;
 
         // Determine bonus percentage based on settings
-        // basePrice = ceiling for 1% (from 0 to basePrice)
-        // premiumPrice = floor for 2% (from premiumPrice and above)
+        // premiumPrice = threshold: >= premiumPrice → 2%, < premiumPrice → 1%
+        // bonus1Enabled / bonus2Enabled control whether each tier is active
+        const bonus1Enabled = setting?.bonus1Enabled !== undefined ? setting.bonus1Enabled : true;
+        const bonus2Enabled = setting?.bonus2Enabled !== undefined ? setting.bonus2Enabled : true;
+
         let percentage = 0;
         let category = "لا بونص";
-        if (priceWithTax >= premiumPrice) {
-          percentage = 2;
-          category = "تميز";
-        } else if (priceWithTax > 0 && priceWithTax <= basePrice) {
-          percentage = 1;
-          category = "أساسي";
+        if (priceWithTax > 0) {
+          if (priceWithTax >= premiumPrice && bonus2Enabled) {
+            percentage = 2;
+            category = "تميز";
+          } else if (priceWithTax < premiumPrice && bonus1Enabled) {
+            percentage = 1;
+            category = "أساسي";
+          } else if (priceWithTax >= premiumPrice && !bonus2Enabled && bonus1Enabled) {
+            // 2% disabled but 1% enabled → give 1%
+            percentage = 1;
+            category = "أساسي";
+          }
         }
 
         const bonus = itemTotal * (percentage / 100);

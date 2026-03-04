@@ -98,7 +98,14 @@ export async function getProductSettings() {
   return await db.select().from(productSettings);
 }
 
-export async function upsertProductSetting(productId: string, productName: string, premiumPrice: number, basePrice: number) {
+export async function upsertProductSetting(
+  productId: string,
+  productName: string,
+  premiumPrice: number,
+  basePrice: number,
+  bonus1Enabled: boolean = true,
+  bonus2Enabled: boolean = true
+) {
   const db = await getDb();
   if (!db) return;
   
@@ -110,12 +117,16 @@ export async function upsertProductSetting(productId: string, productName: strin
       productName,
       premiumPrice,
       basePrice,
+      bonus1Enabled,
+      bonus2Enabled,
     })
     .onDuplicateKeyUpdate({
       set: {
         productName,
         premiumPrice,
         basePrice,
+        bonus1Enabled,
+        bonus2Enabled,
       },
     });
 }

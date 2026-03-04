@@ -1,4 +1,4 @@
-import { int, mediumtext, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { boolean, int, mediumtext, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -35,6 +35,8 @@ export const productSettings = mysqlTable("productSettings", {
   productName: text("productName"),
   premiumPrice: int("premiumPrice").default(70).notNull(), // سعر التميز 2%
   basePrice: int("basePrice").default(69).notNull(), // سعر الأساسي 1%
+  bonus1Enabled: boolean("bonus1Enabled").default(true).notNull(), // تفعيل/إيقاف بونص 1%
+  bonus2Enabled: boolean("bonus2Enabled").default(true).notNull(), // تفعيل/إيقاف بونص 2%
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
