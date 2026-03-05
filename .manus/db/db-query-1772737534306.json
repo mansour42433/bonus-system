@@ -1,0 +1,25 @@
+{
+  "query": "SHOW TABLES;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2Kt54zKDUXrhJ93.8bb656e63664 --database foemZFf6hfhh42o3XSy4Gv --execute SHOW TABLES;",
+  "rows": [
+    {
+      "Tables_in_foemZFf6hfhh42o3XSy4Gv": "__drizzle_migrations"
+    },
+    {
+      "Tables_in_foemZFf6hfhh42o3XSy4Gv": "productSettings"
+    },
+    {
+      "Tables_in_foemZFf6hfhh42o3XSy4Gv": "qoyodCache"
+    },
+    {
+      "Tables_in_foemZFf6hfhh42o3XSy4Gv": "repSettings"
+    },
+    {
+      "Tables_in_foemZFf6hfhh42o3XSy4Gv": "users"
+    }
+  ],
+  "messages": [],
+  "stdout": "Tables_in_foemZFf6hfhh42o3XSy4Gv\n__drizzle_migrations\nproductSettings\nqoyodCache\nrepSettings\nusers\n",
+  "stderr": "",
+  "execution_time_ms": 1722
+}

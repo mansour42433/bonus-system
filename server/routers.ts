@@ -195,14 +195,14 @@ export const appRouter = router({
         // Fetch invoices by IDs
         const invoices = await fetchQoyodInvoicesByIds(invoiceIds);
         
-        // Filter only Paid invoices
-        const paidInvoices = invoices.filter((inv: any) => inv.status === "Paid");
-        console.log(`[Qoyod] Filtered to ${paidInvoices.length} Paid invoices`);
+        // Include all invoices that have a payment in the selected period (Paid or Approved)
+        // We already filtered by payment date above, so all these invoices are effectively paid
+        console.log(`[Qoyod] Found ${invoices.length} invoices with payments in selected period (Paid + Approved)`);
         
         // Cache the data for 1 hour
-        await setCachedData(cacheKey, paidInvoices, 3600);
+        await setCachedData(cacheKey, invoices, 3600);
         
-        return { invoices: paidInvoices };
+        return { invoices };
       }),
 
     // Fetch products

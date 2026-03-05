@@ -123,23 +123,28 @@ export default function Dashboard() {
     const [selectedYear, selectedMonthNum] = selectedMonth.split("-").map(Number);
 
     invoices.forEach((invoice: any) => {
-      const isPaid = invoice.status === "Paid";
-      
       // Get payment date from paymentsData
       const paymentDate = paymentDates.get(invoice.id);
       
-      // Skip if paid but no payment date found
-      if (isPaid && !paymentDate) return;
+      // Treat as paid if: status is Paid, OR status is Approved but has a payment in the selected month
+      // (Approved = partially paid or paid via different method in Qoyod)
+      const isStatusPaid = invoice.status === "Paid";
+      const isStatusApproved = invoice.status === "Approved";
       
       // Check if payment was made in selected month
       let isInSelectedMonth = false;
-      if (isPaid && paymentDate) {
+      if (paymentDate) {
         const [payYear, payMonth] = paymentDate.split("-").map(Number);
         isInSelectedMonth = payYear === selectedYear && payMonth === selectedMonthNum;
       }
       
-      // Skip if paid but not in selected month
-      if (isPaid && !isInSelectedMonth) return;
+      // isPaid = has a payment record in the selected month (regardless of status)
+      const isPaid = (isStatusPaid || isStatusApproved) && isInSelectedMonth;
+      
+      // Skip if no payment in selected month and not a pending invoice
+      if (!isPaid && !isStatusApproved && !isStatusPaid) return;
+      // Skip paid invoices not in selected month
+      if ((isStatusPaid || isStatusApproved) && !isInSelectedMonth) return;
       
       invoice.line_items?.forEach((item: any) => {
         const setting = settings.find((s) => String(s.productId) === String(item.product_id));
