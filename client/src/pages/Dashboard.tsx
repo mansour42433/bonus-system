@@ -123,13 +123,8 @@ export default function Dashboard() {
     const [selectedYear, selectedMonthNum] = selectedMonth.split("-").map(Number);
 
     invoices.forEach((invoice: any) => {
-      // Get payment date from paymentsData
+      // Get payment date from paymentsData (set by invoice_payments API)
       const paymentDate = paymentDates.get(invoice.id);
-      
-      // Treat as paid if: status is Paid, OR status is Approved but has a payment in the selected month
-      // (Approved = partially paid or paid via different method in Qoyod)
-      const isStatusPaid = invoice.status === "Paid";
-      const isStatusApproved = invoice.status === "Approved";
       
       // Check if payment was made in selected month
       let isInSelectedMonth = false;
@@ -138,13 +133,15 @@ export default function Dashboard() {
         isInSelectedMonth = payYear === selectedYear && payMonth === selectedMonthNum;
       }
       
-      // isPaid = has a payment record in the selected month (regardless of status)
-      const isPaid = (isStatusPaid || isStatusApproved) && isInSelectedMonth;
+      // RULE 1: Invoice must have a payment recorded in the selected month to count as paid
+      // This covers both "Paid" and "Approved" statuses (Approved = paid via receipt in Qoyod)
+      const isPaid = isInSelectedMonth;
       
-      // Skip if no payment in selected month and not a pending invoice
-      if (!isPaid && !isStatusApproved && !isStatusPaid) return;
-      // Skip paid invoices not in selected month
-      if ((isStatusPaid || isStatusApproved) && !isInSelectedMonth) return;
+      // RULE 2: Invoices with no payment in selected month go to pending (Approved = آجل)
+      const isPending = !isInSelectedMonth && (invoice.status === "Approved");
+      
+      // Skip invoices that are neither paid this month nor pending
+      if (!isPaid && !isPending) return;
       
       invoice.line_items?.forEach((item: any) => {
         const setting = settings.find((s) => String(s.productId) === String(item.product_id));
