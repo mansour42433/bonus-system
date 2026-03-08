@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { getLoginUrl } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -228,7 +229,9 @@ export default function Settings() {
   }
 
   if (!user) {
-    return <div className="flex items-center justify-center min-h-screen">يرجى تسجيل الدخول</div>;
+    const loginUrl = getLoginUrl();
+    window.location.href = loginUrl;
+    return <div className="flex items-center justify-center min-h-screen">جاري توجيهك لتسجيل الدخول...</div>;
   }
 
   return (

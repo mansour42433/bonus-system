@@ -22,17 +22,20 @@ export const appRouter = router({
     // Fetch invoices
     fetchInvoices: protectedProcedure
       .input((val: unknown) => {
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
         if (
           typeof val === "object" &&
           val !== null &&
           "startDate" in val &&
           "endDate" in val &&
           typeof val.startDate === "string" &&
-          typeof val.endDate === "string"
+          typeof val.endDate === "string" &&
+          dateRegex.test(val.startDate) &&
+          dateRegex.test(val.endDate)
         ) {
           return { startDate: val.startDate, endDate: val.endDate };
         }
-        throw new Error("Invalid input: startDate and endDate must be strings");
+        throw new Error("Invalid input: startDate and endDate must be strings in YYYY-MM-DD format");
       })
       .query(async ({ ctx, input }) => {
         const { getCachedData, setCachedData } = await import("./db");
@@ -61,17 +64,20 @@ export const appRouter = router({
     // Fetch credit notes
     fetchCreditNotes: protectedProcedure
       .input((val: unknown) => {
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
         if (
           typeof val === "object" &&
           val !== null &&
           "startDate" in val &&
           "endDate" in val &&
           typeof val.startDate === "string" &&
-          typeof val.endDate === "string"
+          typeof val.endDate === "string" &&
+          dateRegex.test(val.startDate) &&
+          dateRegex.test(val.endDate)
         ) {
           return { startDate: val.startDate, endDate: val.endDate };
         }
-        throw new Error("Invalid input: startDate and endDate must be strings");
+        throw new Error("Invalid input: startDate and endDate must be strings in YYYY-MM-DD format");
       })
       .query(async ({ ctx, input }) => {
         const { getCachedData, setCachedData } = await import("./db");
@@ -100,17 +106,20 @@ export const appRouter = router({
     // Fetch invoice payments
     fetchInvoicePayments: protectedProcedure
       .input((val: unknown) => {
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
         if (
           typeof val === "object" &&
           val !== null &&
           "startDate" in val &&
           "endDate" in val &&
           typeof val.startDate === "string" &&
-          typeof val.endDate === "string"
+          typeof val.endDate === "string" &&
+          dateRegex.test(val.startDate) &&
+          dateRegex.test(val.endDate)
         ) {
           return { startDate: val.startDate, endDate: val.endDate };
         }
-        throw new Error("Invalid input: startDate and endDate must be strings");
+        throw new Error("Invalid input: startDate and endDate must be strings in YYYY-MM-DD format");
       })
       .query(async ({ ctx, input }) => {
         const { getCachedData, setCachedData } = await import("./db");
@@ -139,17 +148,20 @@ export const appRouter = router({
     // Fetch invoices by payment date (new logic)
     fetchInvoicesByPaymentDate: protectedProcedure
       .input((val: unknown) => {
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
         if (
           typeof val === "object" &&
           val !== null &&
           "startDate" in val &&
           "endDate" in val &&
           typeof val.startDate === "string" &&
-          typeof val.endDate === "string"
+          typeof val.endDate === "string" &&
+          dateRegex.test(val.startDate) &&
+          dateRegex.test(val.endDate)
         ) {
           return { startDate: val.startDate, endDate: val.endDate };
         }
-        throw new Error("Invalid input: startDate and endDate must be strings");
+        throw new Error("Invalid input: startDate and endDate must be strings in YYYY-MM-DD format");
       })
       .query(async ({ ctx, input }) => {
         const { getCachedData, setCachedData } = await import("./db");
@@ -169,9 +181,6 @@ export const appRouter = router({
         console.log(`[Cache] Fetching invoices by payment date for ${cacheKey}`);
         const payments = await fetchQoyodInvoicePayments(input.startDate, input.endDate);
         console.log(`[Debug] Found ${payments.length} payments`);
-        if (payments.length > 0) {
-          console.log(`[Debug] First payment sample:`, JSON.stringify(payments[0], null, 2));
-        }
         
         // Extract unique invoice IDs from allocations and group by invoice_id to get latest payment date
         const invoicePaymentDates = new Map<number, string>();
