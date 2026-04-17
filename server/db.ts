@@ -373,3 +373,411 @@ export async function getBonusSummary(
   
   return { paid, unpaid, total: paid + unpaid };
 }
+
+
+// ============ Invoices Management ============
+
+export async function upsertInvoice(
+  invoiceId: number,
+  invoiceReference: string,
+  repEmail: string,
+  clientName: string,
+  invoiceDate: string,
+  invoiceAmount: number,
+  invoiceStatus: "Paid" | "Approved" | "Draft" | "Cancelled",
+  paymentDate?: string
+) {
+  const db = await getDb();
+  if (!db) return;
+  
+  const { invoices } = await import("../drizzle/schema");
+  
+  await db.insert(invoices)
+    .values({
+      invoiceId,
+      invoiceReference,
+      repEmail,
+      clientName,
+      invoiceDate,
+      invoiceAmount,
+      invoiceStatus,
+      paymentDate,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        clientName,
+        invoiceStatus,
+        paymentDate,
+        invoiceAmount,
+      },
+    });
+}
+
+export async function getInvoicesByRep(
+  repEmail: string,
+  startDate?: string,
+  endDate?: string
+) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { invoices } = await import("../drizzle/schema");
+  const { eq, and, gte, lte } = await import("drizzle-orm");
+  
+  let conditions = [eq(invoices.repEmail, repEmail)];
+  
+  if (startDate) {
+    conditions.push(gte(invoices.invoiceDate, startDate));
+  }
+  if (endDate) {
+    conditions.push(lte(invoices.invoiceDate, endDate));
+  }
+  
+  return await db.select().from(invoices).where(and(...conditions));
+}
+
+export async function getInvoicesByStatus(
+  status: "Paid" | "Approved" | "Draft" | "Cancelled",
+  startDate?: string,
+  endDate?: string
+) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { invoices } = await import("../drizzle/schema");
+  const { eq, and, gte, lte } = await import("drizzle-orm");
+  
+  let conditions = [eq(invoices.invoiceStatus, status)];
+  
+  if (startDate) {
+    conditions.push(gte(invoices.invoiceDate, startDate));
+  }
+  if (endDate) {
+    conditions.push(lte(invoices.invoiceDate, endDate));
+  }
+  
+  return await db.select().from(invoices).where(and(...conditions));
+}
+
+// ============ Invoice Items Management ============
+
+export async function upsertInvoiceItem(
+  invoiceId: number,
+  productId: string,
+  productName: string,
+  category: string,
+  quantity: number,
+  price: number,
+  total: number
+) {
+  const db = await getDb();
+  if (!db) return;
+  
+  const { invoiceItems } = await import("../drizzle/schema");
+  
+  await db.insert(invoiceItems)
+    .values({
+      invoiceId,
+      productId,
+      productName,
+      category,
+      quantity,
+      price,
+      total,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        quantity,
+        price,
+        total,
+      },
+    });
+}
+
+export async function getInvoiceItems(invoiceId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { invoiceItems } = await import("../drizzle/schema");
+  const { eq } = await import("drizzle-orm");
+  
+  return await db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, invoiceId));
+}
+
+// ============ Products Management ============
+
+export async function upsertProduct(
+  productId: string,
+  productName: string,
+  category: string,
+  price: number
+) {
+  const db = await getDb();
+  if (!db) return;
+  
+  const { products } = await import("../drizzle/schema");
+  
+  await db.insert(products)
+    .values({
+      productId,
+      productName,
+      category,
+      price,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        productName,
+        category,
+        price,
+      },
+    });
+}
+
+export async function getProducts() {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { products } = await import("../drizzle/schema");
+  return await db.select().from(products);
+}
+
+// ============ Credit Notes Management ============
+
+export async function upsertCreditNote(
+  creditNoteId: string,
+  invoiceId: number,
+  invoiceReference: string,
+  productId: string,
+  productName: string,
+  quantity: number,
+  amount: number,
+  creditNoteDate: string
+) {
+  const db = await getDb();
+  if (!db) return;
+  
+  const { creditNotes } = await import("../drizzle/schema");
+  
+  await db.insert(creditNotes)
+    .values({
+      creditNoteId,
+      invoiceId,
+      invoiceReference,
+      productId,
+      productName,
+      quantity,
+      amount,
+      creditNoteDate,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        quantity,
+        amount,
+      },
+    });
+}
+
+export async function getCreditNotesByInvoice(invoiceId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { creditNotes } = await import("../drizzle/schema");
+  const { eq } = await import("drizzle-orm");
+  
+  return await db.select().from(creditNotes).where(eq(creditNotes.invoiceId, invoiceId));
+}
+
+// ============ Rep Performance Summary ============
+
+export async function upsertRepPerformance(
+  repEmail: string,
+  month: string,
+  totalSales: number,
+  paidInvoices: number,
+  unpaidInvoices: number,
+  bonusEarned: number,
+  bonusPaid: number,
+  bonusRemaining: number
+) {
+  const db = await getDb();
+  if (!db) return;
+  
+  const { repPerformance } = await import("../drizzle/schema");
+  
+  await db.insert(repPerformance)
+    .values({
+      repEmail,
+      month,
+      totalSales,
+      paidInvoices,
+      unpaidInvoices,
+      bonusEarned,
+      bonusPaid,
+      bonusRemaining,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        totalSales,
+        paidInvoices,
+        unpaidInvoices,
+        bonusEarned,
+        bonusPaid,
+        bonusRemaining,
+      },
+    });
+}
+
+export async function getRepPerformance(
+  repEmail: string,
+  month: string
+) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { repPerformance } = await import("../drizzle/schema");
+  const { eq, and } = await import("drizzle-orm");
+  
+  const result = await db.select().from(repPerformance)
+    .where(and(eq(repPerformance.repEmail, repEmail), eq(repPerformance.month, month)))
+    .limit(1);
+  
+  return result.length > 0 ? result[0] : null;
+}
+
+// ============ Product Sales Summary ============
+
+export async function upsertProductSalesSummary(
+  productId: string,
+  productName: string,
+  category: string,
+  month: string,
+  totalQuantity: number,
+  totalSales: number,
+  salesCount: number
+) {
+  const db = await getDb();
+  if (!db) return;
+  
+  const { productSalesSummary } = await import("../drizzle/schema");
+  
+  await db.insert(productSalesSummary)
+    .values({
+      productId,
+      productName,
+      category,
+      month,
+      totalQuantity,
+      totalSales,
+      salesCount,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        totalQuantity,
+        totalSales,
+        salesCount,
+      },
+    });
+}
+
+export async function getProductSalesSummary(month: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { productSalesSummary } = await import("../drizzle/schema");
+  const { eq } = await import("drizzle-orm");
+  
+  return await db.select().from(productSalesSummary).where(eq(productSalesSummary.month, month));
+}
+
+// ============ Category Sales Summary ============
+
+export async function upsertCategorySalesSummary(
+  category: string,
+  month: string,
+  totalQuantity: number,
+  totalSales: number,
+  productCount: number
+) {
+  const db = await getDb();
+  if (!db) return;
+  
+  const { categorySalesSummary } = await import("../drizzle/schema");
+  
+  await db.insert(categorySalesSummary)
+    .values({
+      category,
+      month,
+      totalQuantity,
+      totalSales,
+      productCount,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        totalQuantity,
+        totalSales,
+        productCount,
+      },
+    });
+}
+
+export async function getCategorySalesSummary(month: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { categorySalesSummary } = await import("../drizzle/schema");
+  const { eq } = await import("drizzle-orm");
+  
+  return await db.select().from(categorySalesSummary).where(eq(categorySalesSummary.month, month));
+}
+
+// ============ Advanced Queries ============
+
+export async function getRepPerformanceSummary(
+  repEmail: string,
+  startDate: string,
+  endDate: string
+) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { invoices, bonusPayments } = await import("../drizzle/schema");
+  const { eq, and, gte, lte, sql } = await import("drizzle-orm");
+  
+  // Get invoices for this rep in the period
+  const repInvoices = await db.select({
+    total: sql<number>`SUM(${invoices.invoiceAmount})`,
+    count: sql<number>`COUNT(*)`,
+    paidCount: sql<number>`SUM(CASE WHEN ${invoices.invoiceStatus} = 'Paid' THEN 1 ELSE 0 END)`,
+  })
+  .from(invoices)
+  .where(and(
+    eq(invoices.repEmail, repEmail),
+    gte(invoices.invoiceDate, startDate),
+    lte(invoices.invoiceDate, endDate)
+  ));
+  
+  // Get bonus summary for this rep in the period
+  const bonusSummary = await db.select({
+    earned: sql<number>`SUM(CASE WHEN ${bonusPayments.status} = 'unpaid' THEN ${bonusPayments.bonusAmount} ELSE 0 END)`,
+    paid: sql<number>`SUM(CASE WHEN ${bonusPayments.status} = 'paid' THEN ${bonusPayments.bonusAmount} ELSE 0 END)`,
+  })
+  .from(bonusPayments)
+  .where(and(
+    eq(bonusPayments.repEmail, repEmail),
+    gte(bonusPayments.paymentDate, startDate),
+    lte(bonusPayments.paymentDate, endDate)
+  ));
+  
+  const invoiceData = repInvoices[0] || {};
+  const bonusData = bonusSummary[0] || {};
+  
+  return {
+    totalSales: invoiceData.total || 0,
+    totalInvoices: invoiceData.count || 0,
+    paidInvoices: invoiceData.paidCount || 0,
+    unpaidInvoices: (invoiceData.count || 0) - (invoiceData.paidCount || 0),
+    bonusEarned: bonusData.earned || 0,
+    bonusPaid: bonusData.paid || 0,
+    bonusRemaining: (bonusData.earned || 0) - (bonusData.paid || 0),
+  };
+}

@@ -101,3 +101,147 @@ export const bonusPayments = mysqlTable("bonusPayments", {
 
 export type BonusPayment = typeof bonusPayments.$inferSelect;
 export type InsertBonusPayment = typeof bonusPayments.$inferInsert;
+
+/**
+ * Products Table
+ * Stores product information from Qoyod
+ */
+export const products = mysqlTable("products", {
+  id: int("id").autoincrement().primaryKey(),
+  productId: varchar("productId", { length: 128 }).notNull().unique(), // Qoyod product ID
+  productName: text("productName").notNull(),
+  category: text("category"), // الصنف/الفئة
+  price: int("price").default(0), // السعر الافتراضي
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Product = typeof products.$inferSelect;
+export type InsertProduct = typeof products.$inferInsert;
+
+/**
+ * Invoices Table
+ * Stores invoice information from Qoyod
+ * Links invoices to sales representatives
+ */
+export const invoices = mysqlTable("invoices", {
+  id: int("id").autoincrement().primaryKey(),
+  invoiceId: int("invoiceId").notNull().unique(), // Qoyod invoice ID
+  invoiceReference: varchar("invoiceReference", { length: 128 }).notNull(), // e.g., "INV4591"
+  repEmail: varchar("repEmail", { length: 320 }).notNull(), // المندوب (من repSettings)
+  clientName: text("clientName"), // اسم العميل
+  invoiceDate: varchar("invoiceDate", { length: 10 }).notNull(), // YYYY-MM-DD
+  invoiceAmount: int("invoiceAmount").notNull(), // إجمالي الفاتورة
+  invoiceStatus: mysqlEnum("invoiceStatus", ["Paid", "Approved", "Draft", "Cancelled"]).default("Draft").notNull(), // حالة الفاتورة
+  paymentDate: varchar("paymentDate", { length: 10 }), // YYYY-MM-DD (تاريخ الدفع)
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Invoice = typeof invoices.$inferSelect;
+export type InsertInvoice = typeof invoices.$inferInsert;
+
+/**
+ * Invoice Items Table
+ * Stores individual products/items within each invoice
+ * Links invoices to products
+ */
+export const invoiceItems = mysqlTable("invoiceItems", {
+  id: int("id").autoincrement().primaryKey(),
+  invoiceId: int("invoiceId").notNull(), // Foreign key to invoices
+  productId: varchar("productId", { length: 128 }).notNull(), // Foreign key to products
+  productName: text("productName").notNull(),
+  category: text("category"), // الصنف
+  quantity: int("quantity").notNull(), // الكمية
+  price: int("price").notNull(), // السعر للوحدة
+  total: int("total").notNull(), // الإجمالي (quantity * price)
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type InvoiceItem = typeof invoiceItems.$inferSelect;
+export type InsertInvoiceItem = typeof invoiceItems.$inferInsert;
+
+/**
+ * Credit Notes Table
+ * Stores returned/cancelled items (المرتجعات)
+ * Used to exclude from bonus calculations
+ */
+export const creditNotes = mysqlTable("creditNotes", {
+  id: int("id").autoincrement().primaryKey(),
+  creditNoteId: varchar("creditNoteId", { length: 128 }).notNull().unique(), // Qoyod credit note ID
+  invoiceId: int("invoiceId").notNull(), // Foreign key to invoices
+  invoiceReference: varchar("invoiceReference", { length: 128 }).notNull(), // e.g., "INV4591"
+  productId: varchar("productId", { length: 128 }).notNull(), // Foreign key to products
+  productName: text("productName").notNull(),
+  quantity: int("quantity").notNull(), // الكمية المرتجعة
+  amount: int("amount").notNull(), // المبلغ المرتجع
+  creditNoteDate: varchar("creditNoteDate", { length: 10 }).notNull(), // YYYY-MM-DD
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CreditNote = typeof creditNotes.$inferSelect;
+export type InsertCreditNote = typeof creditNotes.$inferInsert;
+
+/**
+ * Rep Performance Table
+ * Stores aggregated performance metrics for each rep
+ * Updated periodically for quick access
+ */
+export const repPerformance = mysqlTable("repPerformance", {
+  id: int("id").autoincrement().primaryKey(),
+  repEmail: varchar("repEmail", { length: 320 }).notNull(),
+  month: varchar("month", { length: 7 }).notNull(), // YYYY-MM
+  totalSales: int("totalSales").default(0), // إجمالي المبيعات
+  paidInvoices: int("paidInvoices").default(0), // عدد الفواتير المدفوعة
+  unpaidInvoices: int("unpaidInvoices").default(0), // عدد الفواتير غير المدفوعة
+  bonusEarned: int("bonusEarned").default(0), // البونص المستحق
+  bonusPaid: int("bonusPaid").default(0), // البونص المدفوع
+  bonusRemaining: int("bonusRemaining").default(0), // البونص المتبقي
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type RepPerformance = typeof repPerformance.$inferSelect;
+export type InsertRepPerformance = typeof repPerformance.$inferInsert;
+
+/**
+ * Product Sales Summary Table
+ * Stores aggregated sales data for each product
+ * Updated periodically for quick access
+ */
+export const productSalesSummary = mysqlTable("productSalesSummary", {
+  id: int("id").autoincrement().primaryKey(),
+  productId: varchar("productId", { length: 128 }).notNull(),
+  productName: text("productName").notNull(),
+  category: text("category"),
+  month: varchar("month", { length: 7 }).notNull(), // YYYY-MM
+  totalQuantity: int("totalQuantity").default(0), // إجمالي الكمية
+  totalSales: int("totalSales").default(0), // إجمالي المبيعات
+  salesCount: int("salesCount").default(0), // عدد مرات البيع
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ProductSalesSummary = typeof productSalesSummary.$inferSelect;
+export type InsertProductSalesSummary = typeof productSalesSummary.$inferInsert;
+
+/**
+ * Category Sales Summary Table
+ * Stores aggregated sales data for each category
+ * Updated periodically for quick access
+ */
+export const categorySalesSummary = mysqlTable("categorySalesSummary", {
+  id: int("id").autoincrement().primaryKey(),
+  category: text("category").notNull(),
+  month: varchar("month", { length: 7 }).notNull(), // YYYY-MM
+  totalQuantity: int("totalQuantity").default(0), // إجمالي الكمية
+  totalSales: int("totalSales").default(0), // إجمالي المبيعات
+  productCount: int("productCount").default(0), // عدد المنتجات
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CategorySalesSummary = typeof categorySalesSummary.$inferSelect;
+export type InsertCategorySalesSummary = typeof categorySalesSummary.$inferInsert;

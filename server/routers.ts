@@ -412,6 +412,52 @@ export const appRouter = router({
         return summary;
       }),
   }),
+
+  // Reports and Analytics
+  reports: router({
+    repPerformance: protectedProcedure
+      .input((val: unknown) => {
+        if (typeof val === "object" && val !== null && "repEmail" in val && "startDate" in val && "endDate" in val) {
+          return {
+            repEmail: String(val.repEmail),
+            startDate: String(val.startDate),
+            endDate: String(val.endDate),
+          };
+        }
+        throw new Error("Invalid input for rep performance");
+      })
+      .query(async ({ input }) => {
+        const { getRepPerformanceSummary } = await import("./db");
+        const performance = await getRepPerformanceSummary(input.repEmail, input.startDate, input.endDate);
+        return performance;
+      }),
+
+    productSales: protectedProcedure
+      .input((val: unknown) => {
+        if (typeof val === "object" && val !== null && "month" in val) {
+          return { month: String(val.month) };
+        }
+        throw new Error("Invalid input for product sales");
+      })
+      .query(async ({ input }) => {
+        const { getProductSalesSummary } = await import("./db");
+        const sales = await getProductSalesSummary(input.month);
+        return { sales };
+      }),
+
+    categorySales: protectedProcedure
+      .input((val: unknown) => {
+        if (typeof val === "object" && val !== null && "month" in val) {
+          return { month: String(val.month) };
+        }
+        throw new Error("Invalid input for category sales");
+      })
+      .query(async ({ input }) => {
+        const { getCategorySalesSummary } = await import("./db");
+        const sales = await getCategorySalesSummary(input.month);
+        return { sales };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;
