@@ -10,7 +10,7 @@ import ExcelJS from "exceljs";
 import { Link } from "wouter";
 import {
   ArrowRight, RefreshCw, CheckCircle2, Wallet,
-  FileDown, Calendar, Package2, Send
+  FileDown, Package2, Send, Archive
 } from "lucide-react";
 
 // ==================== TYPES ====================
@@ -33,29 +33,26 @@ interface InvoiceRow {
   paymentDate: string;
 }
 
-const MONTH_NAMES = [
-  "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
-  "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر",
-];
-
 export default function Processing() {
   const { user, loading: authLoading } = useAuth();
 
-  const [year, setYear] = useState(() => new Date().getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth()); // 0-indexed
+  // Date range filter (default: current month)
+  const [startDate, setStartDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  });
+  const [endDate, setEndDate] = useState(() => {
+    const now = new Date();
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  });
   const [selectedRep, setSelectedRep] = useState<string>("all");
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set());
   const [deliveryTab, setDeliveryTab] = useState("undelivered");
 
-  // Date range for the selected month
-  const dateRange = useMemo(() => {
-    const start = `${year}-${String(selectedMonth + 1).padStart(2, "0")}-01`;
-    const lastDay = new Date(year, selectedMonth + 1, 0).getDate();
-    const end = `${year}-${String(selectedMonth + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
-    return { startDate: start, endDate: end };
-  }, [year, selectedMonth]);
+  const dateRange = useMemo(() => ({ startDate, endDate }), [startDate, endDate]);
 
-  // Fetch invoices by payment date for this month
+  // Fetch invoices by payment date for this range
   const { data: invoicesData, isLoading: invoicesLoading, refetch: refetchInvoices } =
     trpc.qoyod.fetchInvoicesByPaymentDate.useQuery(dateRange, { enabled: true });
 
@@ -68,7 +65,7 @@ export default function Processing() {
   const { data: settingsData, refetch: refetchSettings } = trpc.settings.list.useQuery();
   const { data: repsData } = trpc.reps.list.useQuery();
 
-  // Bonus payments (delivered records) for this month
+  // Bonus payments (delivered records) for this range
   const { data: deliveredData, refetch: refetchDelivered } =
     trpc.bonusPayments.list.useQuery({
       startDate: dateRange.startDate,
@@ -80,6 +77,7 @@ export default function Processing() {
   const clearCacheMutation = trpc.qoyod.clearCache.useMutation();
   const recordBonusMutation = trpc.bonusPayments.record.useMutation();
   const markAsPaidMutation = trpc.bonusPayments.markAsPaid.useMutation();
+  const saveReportMutation = trpc.savedReports.save.useMutation();
 
   // Helper: rep display name
   const getRepDisplayName = useCallback((repEmail: string) => {
@@ -293,12 +291,72 @@ export default function Processing() {
       }));
       await markAsPaidMutation.mutateAsync(markPayload);
 
+      // Save report to database
+      const allFiltered = filterByRep(bonusData?.allRows || []);
+      const deliveredAfter = [...filteredDelivered, ...selectedRows];
+      const undeliveredAfter = filteredUndelivered.filter((inv) => !selectedInvoices.has(inv.uniqueKey));
+
+      const reportData = JSON.stringify({
+        delivered: deliveredAfter.map((inv) => ({
+          invoiceId: inv.invoiceId,
+          reference: inv.reference,
+          rep: inv.rep,
+          repName: getRepDisplayName(inv.rep),
+          customer: inv.customer,
+          product: inv.product,
+          quantity: inv.quantity,
+          returnedQty: inv.returnedQty,
+          price: inv.price,
+          itemTotal: inv.itemTotal,
+          category: inv.category,
+          percentage: inv.percentage,
+          bonus: inv.bonus,
+          date: inv.date,
+          paymentDate: inv.paymentDate,
+        })),
+        undelivered: undeliveredAfter.map((inv) => ({
+          invoiceId: inv.invoiceId,
+          reference: inv.reference,
+          rep: inv.rep,
+          repName: getRepDisplayName(inv.rep),
+          customer: inv.customer,
+          product: inv.product,
+          quantity: inv.quantity,
+          returnedQty: inv.returnedQty,
+          price: inv.price,
+          itemTotal: inv.itemTotal,
+          category: inv.category,
+          percentage: inv.percentage,
+          bonus: inv.bonus,
+          date: inv.date,
+          paymentDate: inv.paymentDate,
+        })),
+      });
+
+      try {
+        await saveReportMutation.mutateAsync({
+          startDate,
+          endDate,
+          repFilter: selectedRep,
+          totalInvoices: allFiltered.length,
+          deliveredCount: deliveredAfter.length,
+          undeliveredCount: undeliveredAfter.length,
+          totalSales: (deliveredAfter.reduce((s, i) => s + i.itemTotal, 0) + undeliveredAfter.reduce((s, i) => s + i.itemTotal, 0)).toFixed(2),
+          totalBonus: (deliveredAfter.reduce((s, i) => s + i.bonus, 0) + undeliveredAfter.reduce((s, i) => s + i.bonus, 0)).toFixed(2),
+          deliveredBonus: deliveredAfter.reduce((s, i) => s + i.bonus, 0).toFixed(2),
+          undeliveredBonus: undeliveredAfter.reduce((s, i) => s + i.bonus, 0).toFixed(2),
+          reportData,
+        });
+      } catch (reportErr) {
+        console.warn("Failed to save report, but delivery succeeded:", reportErr);
+      }
+
       // Refresh
       await refetchDelivered();
       setSelectedInvoices(new Set());
       setDeliveryTab("delivered");
 
-      toast.success(`تم تسليم بونص ${selectedRows.length} فاتورة بنجاح`);
+      toast.success(`تم تسليم بونص ${selectedRows.length} فاتورة وحفظ التقرير بنجاح`);
     } catch (error: any) {
       if (error.message?.includes("Duplicate")) {
         toast.warning("بعض الفواتير مسجلة مسبقاً، تم تجاوزها");
@@ -377,7 +435,7 @@ export default function Processing() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `معالجة-${MONTH_NAMES[selectedMonth]}-${year}${selectedRep !== "all" ? `-${getRepDisplayName(selectedRep)}` : ""}.xlsx`;
+    link.download = `معالجة-${startDate}_${endDate}${selectedRep !== "all" ? `-${getRepDisplayName(selectedRep)}` : ""}.xlsx`;
     link.click();
     URL.revokeObjectURL(url);
     toast.success("تم تصدير التقرير بنجاح");
@@ -514,24 +572,12 @@ export default function Processing() {
 
             {/* Actions */}
             <div className="flex items-center gap-2">
-              {/* Year selector */}
-              <div className="flex items-center gap-1 bg-gray-100 rounded-lg px-2 py-1">
-                <button onClick={() => setYear((y) => y - 1)} className="text-gray-500 hover:text-gray-800 px-1">◀</button>
-                <span className="text-sm font-bold min-w-[50px] text-center">{year}</span>
-                <button onClick={() => setYear((y) => y + 1)} className="text-gray-500 hover:text-gray-800 px-1">▶</button>
-              </div>
-
-              {/* Rep filter */}
-              <select
-                value={selectedRep}
-                onChange={(e) => setSelectedRep(e.target.value)}
-                className="px-2 py-1.5 border rounded-lg bg-white text-xs"
-              >
-                <option value="all">جميع المناديب</option>
-                {uniqueReps.map((rep: string) => (
-                  <option key={rep} value={rep}>{getRepDisplayName(rep)}</option>
-                ))}
-              </select>
+              <Link href="/saved-reports">
+                <Button variant="outline" size="sm" className="gap-1.5 border-purple-300 text-purple-700 hover:bg-purple-50">
+                  <Archive className="h-3.5 w-3.5" />
+                  التقارير المحفوظة
+                </Button>
+              </Link>
 
               <Button onClick={refreshData} disabled={clearCacheMutation.isPending} variant="outline" size="sm" className="gap-1">
                 <RefreshCw className={`h-3.5 w-3.5 ${clearCacheMutation.isPending ? 'animate-spin' : ''}`} />
@@ -548,25 +594,44 @@ export default function Processing() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-4">
-        {/* ===== MONTH TABS ===== */}
-        <div className="mb-4">
-          <div className="flex gap-1 overflow-x-auto pb-2 scrollbar-thin">
-            {MONTH_NAMES.map((name, idx) => (
-              <button
-                key={idx}
-                onClick={() => { setSelectedMonth(idx); setSelectedInvoices(new Set()); }}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-                  selectedMonth === idx
-                    ? "bg-emerald-600 text-white shadow-md"
-                    : "bg-white text-gray-600 hover:bg-gray-100 border"
-                }`}
-              >
-                <Calendar className="w-3 h-3" />
-                {name}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* ===== DATE RANGE FILTER ===== */}
+        <Card className="mb-4">
+          <CardContent className="p-4">
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="flex-1 min-w-[180px]">
+                <label className="block text-xs font-medium text-gray-600 mb-1">من تاريخ</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => { setStartDate(e.target.value); setSelectedInvoices(new Set()); }}
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                />
+              </div>
+              <div className="flex-1 min-w-[180px]">
+                <label className="block text-xs font-medium text-gray-600 mb-1">إلى تاريخ</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => { setEndDate(e.target.value); setSelectedInvoices(new Set()); }}
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                />
+              </div>
+              <div className="flex-1 min-w-[180px]">
+                <label className="block text-xs font-medium text-gray-600 mb-1">المندوب</label>
+                <select
+                  value={selectedRep}
+                  onChange={(e) => setSelectedRep(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                >
+                  <option value="all">جميع المناديب</option>
+                  {uniqueReps.map((rep: string) => (
+                    <option key={rep} value={rep}>{getRepDisplayName(rep)}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* ===== STATS ===== */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
@@ -600,7 +665,7 @@ export default function Processing() {
         {invoicesLoading && (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-3"></div>
-            <p className="text-sm text-gray-500">جاري تحميل بيانات {MONTH_NAMES[selectedMonth]}...</p>
+            <p className="text-sm text-gray-500">جاري تحميل البيانات...</p>
           </div>
         )}
 

@@ -71,6 +71,13 @@
       "when": 1776423712320,
       "tag": "0009_fixed_rogue",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1776427415697,
+      "tag": "0010_flimsy_the_hood",
+      "breakpoints": true
     }
   ]
 }

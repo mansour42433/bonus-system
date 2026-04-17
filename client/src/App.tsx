@@ -6,6 +6,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Dashboard from "./pages/Dashboard";
 import Processing from "./pages/Processing";
+import SavedReports from "./pages/SavedReports";
 import Settings from "./pages/Settings";
 import Reports from "./pages/Reports";
 import RepReport from "./pages/RepReport";
@@ -16,6 +17,7 @@ function Router() {
     <Switch>
       <Route path={"/"} component={Dashboard} />
       <Route path={"/processing"} component={Processing} />
+      <Route path={"/saved-reports"} component={SavedReports} />
       <Route path={"/settings"} component={Settings} />
       <Route path={"/reports"} component={Reports} />
       <Route path={"/rep-report"} component={RepReport} />

@@ -420,6 +420,69 @@ export const appRouter = router({
       }),
   }),
 
+  // Saved Reports
+  savedReports: router({
+    save: protectedProcedure
+      .input((val: unknown) => {
+        if (typeof val === "object" && val !== null && "startDate" in val && "endDate" in val && "reportData" in val) {
+          return {
+            startDate: String((val as any).startDate),
+            endDate: String((val as any).endDate),
+            repFilter: "repFilter" in val ? String((val as any).repFilter) : "all",
+            totalInvoices: Number((val as any).totalInvoices) || 0,
+            deliveredCount: Number((val as any).deliveredCount) || 0,
+            undeliveredCount: Number((val as any).undeliveredCount) || 0,
+            totalSales: String((val as any).totalSales || "0"),
+            totalBonus: String((val as any).totalBonus || "0"),
+            deliveredBonus: String((val as any).deliveredBonus || "0"),
+            undeliveredBonus: String((val as any).undeliveredBonus || "0"),
+            reportData: String((val as any).reportData),
+          };
+        }
+        throw new Error("Invalid input for saving report");
+      })
+      .mutation(async ({ ctx, input }) => {
+        const { saveReport } = await import("./db");
+        const id = await saveReport({
+          ...input,
+          createdBy: ctx.user?.email || ctx.user?.name || "unknown",
+        });
+        return { success: true, id };
+      }),
+
+    list: protectedProcedure.query(async () => {
+      const { getSavedReports } = await import("./db");
+      const reports = await getSavedReports();
+      return { reports };
+    }),
+
+    getById: protectedProcedure
+      .input((val: unknown) => {
+        if (typeof val === "object" && val !== null && "id" in val) {
+          return { id: Number((val as any).id) };
+        }
+        throw new Error("Invalid input: id required");
+      })
+      .query(async ({ input }) => {
+        const { getSavedReportById } = await import("./db");
+        const report = await getSavedReportById(input.id);
+        return { report };
+      }),
+
+    delete: protectedProcedure
+      .input((val: unknown) => {
+        if (typeof val === "object" && val !== null && "id" in val) {
+          return { id: Number((val as any).id) };
+        }
+        throw new Error("Invalid input: id required");
+      })
+      .mutation(async ({ input }) => {
+        const { deleteSavedReport } = await import("./db");
+        await deleteSavedReport(input.id);
+        return { success: true };
+      }),
+  }),
+
   // Reports and Analytics
   reports: router({
     repPerformance: protectedProcedure

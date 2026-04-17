@@ -247,3 +247,28 @@ export const categorySalesSummary = mysqlTable("categorySalesSummary", {
 
 export type CategorySalesSummary = typeof categorySalesSummary.$inferSelect;
 export type InsertCategorySalesSummary = typeof categorySalesSummary.$inferInsert;
+
+/**
+ * Saved Reports Table
+ * Stores complete bonus reports when bonus is delivered to reps
+ * Each report contains all invoice details (delivered + undelivered) for a date range
+ */
+export const savedReports = mysqlTable("savedReports", {
+  id: int("id").autoincrement().primaryKey(),
+  startDate: varchar("startDate", { length: 10 }).notNull(), // YYYY-MM-DD
+  endDate: varchar("endDate", { length: 10 }).notNull(), // YYYY-MM-DD
+  repFilter: varchar("repFilter", { length: 320 }).default("all").notNull(), // المندوب المحدد أو "all"
+  totalInvoices: int("totalInvoices").default(0).notNull(), // إجمالي عدد الفواتير
+  deliveredCount: int("deliveredCount").default(0).notNull(), // عدد الفواتير المسلمة
+  undeliveredCount: int("undeliveredCount").default(0).notNull(), // عدد الفواتير غير المسلمة
+  totalSales: varchar("totalSales", { length: 20 }).default("0").notNull(), // إجمالي المبيعات (string لدقة الأرقام العشرية)
+  totalBonus: varchar("totalBonus", { length: 20 }).default("0").notNull(), // إجمالي البونص
+  deliveredBonus: varchar("deliveredBonus", { length: 20 }).default("0").notNull(), // البونص المسلم
+  undeliveredBonus: varchar("undeliveredBonus", { length: 20 }).default("0").notNull(), // البونص غير المسلم
+  reportData: mediumtext("reportData").notNull(), // JSON: كل تفاصيل الفواتير والبونص
+  createdBy: varchar("createdBy", { length: 320 }), // المستخدم الذي أنشأ التقرير
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type SavedReport = typeof savedReports.$inferSelect;
+export type InsertSavedReport = typeof savedReports.$inferInsert;

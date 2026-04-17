@@ -1,0 +1,5 @@
+v5.0 Screenshot Notes:
+- Dashboard main page looks correct with date filter, tabs, and data
+- No TypeScript errors, no LSP errors
+- Server running correctly
+- Need to check Processing page and SavedReports page

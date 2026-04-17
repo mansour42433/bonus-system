@@ -799,3 +799,90 @@ export async function getRepPerformanceSummary(
     bonusRemaining: (bonusData.earned || 0) - (bonusData.paid || 0),
   };
 }
+
+
+// ============ Saved Reports Management ============
+
+export async function saveReport(params: {
+  startDate: string;
+  endDate: string;
+  repFilter: string;
+  totalInvoices: number;
+  deliveredCount: number;
+  undeliveredCount: number;
+  totalSales: string;
+  totalBonus: string;
+  deliveredBonus: string;
+  undeliveredBonus: string;
+  reportData: string; // JSON string
+  createdBy?: string;
+}) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { savedReports } = await import("../drizzle/schema");
+  
+  const result = await db.insert(savedReports).values({
+    startDate: params.startDate,
+    endDate: params.endDate,
+    repFilter: params.repFilter,
+    totalInvoices: params.totalInvoices,
+    deliveredCount: params.deliveredCount,
+    undeliveredCount: params.undeliveredCount,
+    totalSales: params.totalSales,
+    totalBonus: params.totalBonus,
+    deliveredBonus: params.deliveredBonus,
+    undeliveredBonus: params.undeliveredBonus,
+    reportData: params.reportData,
+    createdBy: params.createdBy,
+  });
+  
+  return result[0].insertId;
+}
+
+export async function getSavedReports() {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { savedReports } = await import("../drizzle/schema");
+  const { desc } = await import("drizzle-orm");
+  
+  // Return all reports without the full reportData (for listing)
+  const reports = await db.select({
+    id: savedReports.id,
+    startDate: savedReports.startDate,
+    endDate: savedReports.endDate,
+    repFilter: savedReports.repFilter,
+    totalInvoices: savedReports.totalInvoices,
+    deliveredCount: savedReports.deliveredCount,
+    undeliveredCount: savedReports.undeliveredCount,
+    totalSales: savedReports.totalSales,
+    totalBonus: savedReports.totalBonus,
+    deliveredBonus: savedReports.deliveredBonus,
+    undeliveredBonus: savedReports.undeliveredBonus,
+    createdBy: savedReports.createdBy,
+    createdAt: savedReports.createdAt,
+  }).from(savedReports).orderBy(desc(savedReports.createdAt));
+  
+  return reports;
+}
+
+export async function getSavedReportById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const { savedReports } = await import("../drizzle/schema");
+  
+  const result = await db.select().from(savedReports).where(eq(savedReports.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function deleteSavedReport(id: number) {
+  const db = await getDb();
+  if (!db) return false;
+  
+  const { savedReports } = await import("../drizzle/schema");
+  
+  await db.delete(savedReports).where(eq(savedReports.id, id));
+  return true;
+}
