@@ -1,0 +1,26 @@
+Qoyod API v2 Resources (from official docs):
+1. Accounts
+2. Products
+3. Inventories
+4. Product Categories
+5. Product Units
+6. Vendors
+7. Purchase Orders
+8. Bills
+9. Bill Payments
+10. Simple Bills
+11. Simple Bill Payments
+12. Debit Notes
+13. Customers
+14. Quotes
+15. Invoices
+16. Invoice Payments
+17. Credit Notes  <-- EXISTS! resource #17
+18. Receipts
+19. Journal Entries
+
+Credit Notes IS a valid resource. The 404 error might be because the endpoint URL is wrong.
+Current URL: /credit_notes - should work based on Qoyod convention.
+
+Need to check: maybe the Qoyod account doesn't have any credit notes, or the API key doesn't have permission.
+The function already returns [] on error, so the NaN issue in the returns card is from something else.

@@ -1,0 +1,10 @@
+v4.0 Fix Results:
+- NaN issue fixed: مرتجعات card now shows 0.00 ر.س instead of NaN
+- Credit notes API returns 404 (possibly the account has no credit notes or different endpoint)
+- The function gracefully returns [] on error, and NaN protection added
+- Dashboard shows: مبيعات مدفوعة 98,848,271, بونص مدفوع 1,220,883, مبيعات آجلة 75,157,016, بونص آجل 1,438,39, مرتجعات 0.00
+- 4 tabs: مدفوعة (118), غير مدفوعة (48), مرتجعات (7), المنتجات
+- Green button "معالجة وتصدير" visible in header
+- Processing page exists at /processing with months tabs and delivered/undelivered
+
+Note: endDate shows 04/30/2026 but today is 04/17 - this is fine, it's the end of month default

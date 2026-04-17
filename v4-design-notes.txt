@@ -1,0 +1,15 @@
+v4.0 Dashboard Design - Screenshot Review:
+
+Main Dashboard page:
+- Header: Wallet icon + "نظام حساب العمولات" + "عرض الفواتير والبونص"
+- Green button "معالجة وتصدير" links to /processing page
+- Buttons: تحديث, تصدير Excel, Settings gear
+- Date filter: من تاريخ / إلى تاريخ + المندوب dropdown
+- 5 stat cards: مبيعات مدفوعة, بونص مدفوع, مبيعات آجلة, بونص آجل, مرتجعات
+- NOTE: مرتجعات card shows "ليس رقما ر.س" - NaN issue! Need to fix
+- 4 tabs: مدفوعة (118), غير مدفوعة (48), مرتجعات (7), المنتجات
+- Invoice table looks correct with all columns
+
+Issues to fix:
+1. مرتجعات card shows NaN - need to check returnRows calculation
+2. غير مدفوعة shows 48 invoices - Approved invoices are now showing correctly!
