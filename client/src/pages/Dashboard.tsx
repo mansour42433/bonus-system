@@ -79,7 +79,11 @@ export default function Dashboard() {
   const { data: allInvoicesData, isLoading: allInvoicesLoading, refetch: refetchAllInvoices } =
     trpc.qoyod.fetchInvoices.useQuery(
       { startDate, endDate },
-      { enabled: validDates }
+      { 
+        enabled: validDates,
+        staleTime: 0,
+        gcTime: 0
+      }
     );
 
   // Derive paid invoices from allInvoicesData (status === "Paid")
@@ -92,9 +96,9 @@ export default function Dashboard() {
 
   const clearCacheMutation = trpc.qoyod.clearCache.useMutation();
   const { data: creditNotesData, refetch: refetchCreditNotes } =
-    trpc.qoyod.fetchCreditNotes.useQuery({ startDate, endDate }, { enabled: validDates });
+    trpc.qoyod.fetchCreditNotes.useQuery({ startDate, endDate }, { enabled: validDates, staleTime: 0, gcTime: 0 });
   const { data: paymentsData, refetch: refetchPayments } =
-    trpc.qoyod.fetchInvoicePayments.useQuery({ startDate, endDate }, { enabled: validDates });
+    trpc.qoyod.fetchInvoicePayments.useQuery({ startDate, endDate }, { enabled: validDates, staleTime: 0, gcTime: 0 });
   const { data: settingsData, refetch: refetchSettings } = trpc.settings.list.useQuery();
   const { data: repsData } = trpc.reps.list.useQuery();
 

@@ -81,7 +81,8 @@ export interface QoyodCreditNote {
 }
 
 /**
- * Fetch invoices from Qoyod API
+ * Fetch ALL invoices from Qoyod API by issue date (no status filter)
+ * Frontend filters by status locally (Paid, Approved, etc.)
  * @param startDate - Start date (YYYY-MM-DD)
  * @param endDate - End date (YYYY-MM-DD)
  */
@@ -94,18 +95,42 @@ export async function fetchQoyodInvoices(
     "Content-Type": "application/json",
   };
 
-  // Fetch both Paid and Approved invoices
-  const url = `${QOYOD_API_BASE}/invoices?q[issue_date_gteq]=${startDate}&q[issue_date_lteq]=${endDate}&q[status_in][]=Paid&q[status_in][]=Approved`;
+  const allInvoices: QoyodInvoice[] = [];
+  let page = 1;
+  const perPage = 100; // Max per page to reduce API calls
 
   try {
-    const response = await fetch(url, { headers });
-    
-    if (!response.ok) {
-      throw new Error(`Qoyod API error: ${response.status} ${response.statusText}`);
+    while (true) {
+      const url = `${QOYOD_API_BASE}/invoices?q[issue_date_gteq]=${startDate}&q[issue_date_lteq]=${endDate}&page=${page}&per=${perPage}`;
+      
+      const response = await fetch(url, { headers });
+      
+      if (!response.ok) {
+        throw new Error(`Qoyod API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const invoices = data.invoices || [];
+      
+      console.log(`[Qoyod] Fetched page ${page}: ${invoices.length} invoices`);
+      allInvoices.push(...invoices);
+
+      // If we got fewer than perPage, we've reached the last page
+      if (invoices.length < perPage) {
+        break;
+      }
+      
+      page++;
+      
+      // Safety limit to prevent infinite loops
+      if (page > 50) {
+        console.warn("[Qoyod] Reached max page limit (50)");
+        break;
+      }
     }
 
-    const data = await response.json();
-    return data.invoices || [];
+    console.log(`[Qoyod] Total invoices fetched: ${allInvoices.length}`);
+    return allInvoices;
   } catch (error) {
     console.error("[Qoyod] Failed to fetch invoices:", error);
     throw error;
@@ -193,17 +218,33 @@ export async function fetchQoyodInvoicePayments(
     "Content-Type": "application/json",
   };
 
-  const url = `${QOYOD_API_BASE}/invoice_payments?q[date_gteq]=${startDate}&q[date_lteq]=${endDate}`;
+  const allPayments: QoyodInvoicePayment[] = [];
+  let page = 1;
+  const perPage = 100;
 
   try {
-    const response = await fetch(url, { headers });
-    
-    if (!response.ok) {
-      throw new Error(`Qoyod API error: ${response.status} ${response.statusText}`);
+    while (true) {
+      const url = `${QOYOD_API_BASE}/invoice_payments?q[date_gteq]=${startDate}&q[date_lteq]=${endDate}&page=${page}&per=${perPage}`;
+      
+      const response = await fetch(url, { headers });
+      
+      if (!response.ok) {
+        throw new Error(`Qoyod API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const payments = data.receipts || [];
+      
+      console.log(`[Qoyod] Fetched payments page ${page}: ${payments.length} payments`);
+      allPayments.push(...payments);
+
+      if (payments.length < perPage) break;
+      page++;
+      if (page > 50) break;
     }
 
-    const data = await response.json();
-    return data.receipts || [];
+    console.log(`[Qoyod] Total payments fetched: ${allPayments.length}`);
+    return allPayments;
   } catch (error) {
     console.error("[Qoyod] Failed to fetch invoice payments:", error);
     throw error;
@@ -224,27 +265,35 @@ export async function fetchQoyodCreditNotes(
     "Content-Type": "application/json",
   };
 
-  const url = `${QOYOD_API_BASE}/credit_notes?q[issue_date_gteq]=${startDate}&q[issue_date_lteq]=${endDate}`;
+  const allCreditNotes: QoyodCreditNote[] = [];
+  let page = 1;
+  const perPage = 100;
 
   try {
-    const response = await fetch(url, { headers });
-    
-    if (!response.ok) {
-      throw new Error(`Qoyod API error: ${response.status} ${response.statusText}`);
+    while (true) {
+      const url = `${QOYOD_API_BASE}/credit_notes?q[issue_date_gteq]=${startDate}&q[issue_date_lteq]=${endDate}&page=${page}&per=${perPage}`;
+      
+      const response = await fetch(url, { headers });
+      
+      if (!response.ok) {
+        throw new Error(`Qoyod API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const creditNotes = data.credit_notes || [];
+      
+      console.log(`[Qoyod] Fetched credit notes page ${page}: ${creditNotes.length} notes`);
+      allCreditNotes.push(...creditNotes);
+
+      if (creditNotes.length < perPage) break;
+      page++;
+      if (page > 50) break;
     }
 
-    const data = await response.json();
-    const creditNotes = data.credit_notes || [];
-    
-    // Log first credit note to check structure
-    if (creditNotes.length > 0) {
-      console.log('[Qoyod] Credit Note Sample:', JSON.stringify(creditNotes[0], null, 2));
-    }
-    
-    return creditNotes;
+    console.log(`[Qoyod] Total credit notes fetched: ${allCreditNotes.length}`);
+    return allCreditNotes;
   } catch (error) {
     console.error("[Qoyod] Failed to fetch credit notes:", error);
-    // Return empty array if credit notes endpoint doesn't exist
     return [];
   }
 }
