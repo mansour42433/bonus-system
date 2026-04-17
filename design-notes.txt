@@ -1,0 +1,9 @@
+Dashboard v3.0 Design Notes:
+- Wizard with 3 steps: اختيار الفترة → مراجعة الفواتير → حفظ وتسليم
+- Main tabs: معالجة البونص | مسلم | المنتجات | الأصناف
+- Step 1 shows date range + rep filter + quick stats
+- Step 2 has sub-tabs: مدفوعة / غير مدفوعة with checkboxes
+- Step 3 shows saved invoices summary + deliver button
+- No TypeScript errors, server running fine
+- Quick stats only show when data is loaded (step 2+)
+- Need to verify: stats show in step 1 since data loads at step 2
