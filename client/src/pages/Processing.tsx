@@ -2,16 +2,14 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { useState, useMemo, useCallback } from "react";
 import { toast } from "sonner";
 import ExcelJS from "exceljs";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
-  ArrowRight, RefreshCw, CheckCircle2, Wallet,
-  FileDown, Package2, Send, Archive, ClipboardList,
-  Banknote, CreditCard, Building2, Undo2, AlertTriangle
+  ArrowRight, RefreshCw, Wallet, FileDown, Save,
+  ClipboardList, Archive, Target
 } from "lucide-react";
 
 // ==================== TYPES ====================
@@ -36,6 +34,7 @@ interface InvoiceRow {
 
 export default function Processing() {
   const { user, loading: authLoading } = useAuth();
+  const [, navigate] = useLocation();
 
   // Date range filter (default: current month)
   const [startDate, setStartDate] = useState(() => {
@@ -49,18 +48,11 @@ export default function Processing() {
   });
   const [selectedRep, setSelectedRep] = useState<string>("all");
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set());
-  const [deliveryTab, setDeliveryTab] = useState("undelivered");
-  // Delivery confirmation dialog
-  const [showDeliveryDialog, setShowDeliveryDialog] = useState(false);
-  const [deliveryMethod, setDeliveryMethod] = useState<"cash" | "transfer" | "cheque">("cash");
-  const [deliveryDate, setDeliveryDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [deliveryNotes, setDeliveryNotes] = useState("");
-  // Undo state
-  const [undoConfirm, setUndoConfirm] = useState<{ invoiceId: number; repEmail: string; reference: string } | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const dateRange = useMemo(() => ({ startDate, endDate }), [startDate, endDate]);
 
-  // Fetch invoices by payment date for this range
+  // Fetch invoices by payment date
   const { data: invoicesData, isLoading: invoicesLoading, refetch: refetchInvoices } =
     trpc.qoyod.fetchInvoicesByPaymentDate.useQuery(dateRange, { enabled: true });
 
@@ -73,20 +65,18 @@ export default function Processing() {
   const { data: settingsData, refetch: refetchSettings } = trpc.settings.list.useQuery();
   const { data: repsData } = trpc.reps.list.useQuery();
 
-  // Bonus payments (delivered records) for this range
-  const { data: deliveredData, refetch: refetchDelivered } =
+  // Already saved bonus payments for this range (to exclude from saving again)
+  const { data: existingPaymentsData, refetch: refetchExisting } =
     trpc.bonusPayments.list.useQuery({
       startDate: dateRange.startDate,
       endDate: dateRange.endDate,
       repEmail: undefined,
-      status: "paid",
+      status: undefined,
     });
 
   const clearCacheMutation = trpc.qoyod.clearCache.useMutation();
   const recordBonusMutation = trpc.bonusPayments.record.useMutation();
-  const markAsPaidMutation = trpc.bonusPayments.markAsPaid.useMutation();
   const saveReportMutation = trpc.savedReports.save.useMutation();
-  const undoMutation = trpc.bonusPayments.undoDelivery.useMutation();
 
   // Helper: rep display name
   const getRepDisplayName = useCallback((repEmail: string) => {
@@ -208,33 +198,31 @@ export default function Processing() {
     return { totalSales, totalBonus, allRows };
   }, [invoicesData, settingsData, creditNotesData, paymentsData]);
 
-  // ==================== DELIVERED / UNDELIVERED ====================
-  const deliveredInvoiceKeys = useMemo(() => {
-    if (!deliveredData?.payments) return new Set<string>();
+  // ==================== ALREADY SAVED KEYS ====================
+  const existingKeys = useMemo(() => {
+    if (!existingPaymentsData?.payments) return new Set<string>();
     const keys = new Set<string>();
-    deliveredData.payments.forEach((p: any) => {
+    existingPaymentsData.payments.forEach((p: any) => {
       keys.add(`${p.invoiceId}-${p.repEmail}`);
     });
     return keys;
-  }, [deliveredData]);
+  }, [existingPaymentsData]);
 
-  const { undeliveredInvoices, deliveredInvoices } = useMemo(() => {
-    if (!bonusData) return { undeliveredInvoices: [], deliveredInvoices: [] };
-
-    const undelivered: InvoiceRow[] = [];
-    const delivered: InvoiceRow[] = [];
-
+  // Split into new (not saved) and already saved
+  const { newInvoices, savedInvoices } = useMemo(() => {
+    if (!bonusData) return { newInvoices: [], savedInvoices: [] };
+    const newOnes: InvoiceRow[] = [];
+    const saved: InvoiceRow[] = [];
     bonusData.allRows.forEach((row) => {
       const key = `${row.invoiceId}-${row.rep}`;
-      if (deliveredInvoiceKeys.has(key)) {
-        delivered.push(row);
+      if (existingKeys.has(key)) {
+        saved.push(row);
       } else {
-        undelivered.push(row);
+        newOnes.push(row);
       }
     });
-
-    return { undeliveredInvoices: undelivered, deliveredInvoices: delivered };
-  }, [bonusData, deliveredInvoiceKeys]);
+    return { newInvoices: newOnes, savedInvoices: saved };
+  }, [bonusData, existingKeys]);
 
   // Unique reps
   const uniqueReps = useMemo(() => {
@@ -247,8 +235,8 @@ export default function Processing() {
     return invoices.filter((inv) => inv.rep === selectedRep);
   }, [selectedRep]);
 
-  const filteredUndelivered = filterByRep(undeliveredInvoices);
-  const filteredDelivered = filterByRep(deliveredInvoices);
+  const filteredNew = filterByRep(newInvoices);
+  const filteredSaved = filterByRep(savedInvoices);
 
   // ==================== SELECTION ====================
   const toggleSelect = (key: string) => {
@@ -261,149 +249,111 @@ export default function Processing() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedInvoices.size === filteredUndelivered.length) {
+    if (selectedInvoices.size === filteredNew.length) {
       setSelectedInvoices(new Set());
     } else {
-      setSelectedInvoices(new Set(filteredUndelivered.map((inv) => inv.uniqueKey)));
+      setSelectedInvoices(new Set(filteredNew.map((inv) => inv.uniqueKey)));
     }
   };
 
-  // Open delivery dialog
-  const openDeliveryDialog = () => {
-    if (selectedInvoices.size === 0) {
+  // ==================== SAVE SELECTED (no delivery - just record) ====================
+  const saveSelected = async () => {
+    const selectedRows = filteredNew.filter((inv) => selectedInvoices.has(inv.uniqueKey));
+    if (selectedRows.length === 0) {
       toast.error("يرجى تحديد فاتورة واحدة على الأقل");
       return;
     }
-    setDeliveryDate(new Date().toISOString().split("T")[0]);
-    setDeliveryMethod("cash");
-    setDeliveryNotes("");
-    setShowDeliveryDialog(true);
-  };
 
-  // Undo delivery handler
-  const handleUndo = async () => {
-    if (!undoConfirm) return;
+    setSaving(true);
     try {
-      await undoMutation.mutateAsync([{ invoiceId: undoConfirm.invoiceId, repEmail: undoConfirm.repEmail }]);
-      toast.success(`تم التراجع عن تسليم فاتورة ${undoConfirm.reference}`);
-      setUndoConfirm(null);
-      await refetchDelivered();
-    } catch (error) {
-      toast.error("فشل التراجع عن التسليم");
-    }
-  };
+      let savedCount = 0;
+      let skippedCount = 0;
 
-  // ==================== SAVE & DELIVER ====================
-  const saveAndDeliver = async () => {
-    const selectedRows = filteredUndelivered.filter((inv) => selectedInvoices.has(inv.uniqueKey));
-
-    try {
-      // Record each invoice bonus
       for (const row of selectedRows) {
-        await recordBonusMutation.mutateAsync({
-          invoiceId: row.invoiceId,
-          invoiceReference: row.reference,
-          repEmail: row.rep,
-          bonusAmount: row.bonus,
-          bonusPercentage: row.percentage,
-          invoiceAmount: row.itemTotal,
-          invoiceDate: row.date,
-          paymentDate: row.paymentDate,
-          notes: deliveryNotes || undefined,
-        });
+        try {
+          await recordBonusMutation.mutateAsync({
+            invoiceId: row.invoiceId,
+            invoiceReference: row.reference,
+            repEmail: row.rep,
+            bonusAmount: row.bonus,
+            bonusPercentage: row.percentage,
+            invoiceAmount: row.itemTotal,
+            invoiceDate: row.date,
+            paymentDate: row.paymentDate,
+            notes: undefined,
+          });
+          savedCount++;
+        } catch (err: any) {
+          if (err.message?.includes("Duplicate")) {
+            skippedCount++;
+          } else {
+            throw err;
+          }
+        }
       }
 
-      // Mark as paid with delivery info
-      const markPayload = selectedRows.map((row) => ({
-        invoiceId: row.invoiceId,
-        repEmail: row.rep,
-      }));
-      await markAsPaidMutation.mutateAsync({ items: markPayload, deliveryMethod, deliveryDate, notes: deliveryNotes });
-
-      // Save report to database
-      const allFiltered = filterByRep(bonusData?.allRows || []);
-      const deliveredAfter = [...filteredDelivered, ...selectedRows];
-      const undeliveredAfter = filteredUndelivered.filter((inv) => !selectedInvoices.has(inv.uniqueKey));
-
-      const reportData = JSON.stringify({
-        delivered: deliveredAfter.map((inv) => ({
-          invoiceId: inv.invoiceId,
-          reference: inv.reference,
-          rep: inv.rep,
-          repName: getRepDisplayName(inv.rep),
-          customer: inv.customer,
-          product: inv.product,
-          quantity: inv.quantity,
-          returnedQty: inv.returnedQty,
-          price: inv.price,
-          itemTotal: inv.itemTotal,
-          category: inv.category,
-          percentage: inv.percentage,
-          bonus: inv.bonus,
-          date: inv.date,
-          paymentDate: inv.paymentDate,
-        })),
-        undelivered: undeliveredAfter.map((inv) => ({
-          invoiceId: inv.invoiceId,
-          reference: inv.reference,
-          rep: inv.rep,
-          repName: getRepDisplayName(inv.rep),
-          customer: inv.customer,
-          product: inv.product,
-          quantity: inv.quantity,
-          returnedQty: inv.returnedQty,
-          price: inv.price,
-          itemTotal: inv.itemTotal,
-          category: inv.category,
-          percentage: inv.percentage,
-          bonus: inv.bonus,
-          date: inv.date,
-          paymentDate: inv.paymentDate,
-        })),
-      });
-
+      // Save report
       try {
+        const allFiltered = filterByRep(bonusData?.allRows || []);
+        const reportData = JSON.stringify({
+          newSaved: selectedRows.map((inv) => ({
+            invoiceId: inv.invoiceId, reference: inv.reference, rep: inv.rep,
+            repName: getRepDisplayName(inv.rep), customer: inv.customer, product: inv.product,
+            quantity: inv.quantity, returnedQty: inv.returnedQty, price: inv.price,
+            itemTotal: inv.itemTotal, category: inv.category, percentage: inv.percentage,
+            bonus: inv.bonus, date: inv.date, paymentDate: inv.paymentDate,
+          })),
+          previouslySaved: filteredSaved.map((inv) => ({
+            invoiceId: inv.invoiceId, reference: inv.reference, rep: inv.rep,
+            repName: getRepDisplayName(inv.rep), customer: inv.customer, product: inv.product,
+            quantity: inv.quantity, returnedQty: inv.returnedQty, price: inv.price,
+            itemTotal: inv.itemTotal, category: inv.category, percentage: inv.percentage,
+            bonus: inv.bonus, date: inv.date, paymentDate: inv.paymentDate,
+          })),
+        });
+
         await saveReportMutation.mutateAsync({
-          startDate,
-          endDate,
-          repFilter: selectedRep,
+          startDate, endDate, repFilter: selectedRep,
           totalInvoices: allFiltered.length,
-          deliveredCount: deliveredAfter.length,
-          undeliveredCount: undeliveredAfter.length,
-          totalSales: (deliveredAfter.reduce((s, i) => s + i.itemTotal, 0) + undeliveredAfter.reduce((s, i) => s + i.itemTotal, 0)).toFixed(2),
-          totalBonus: (deliveredAfter.reduce((s, i) => s + i.bonus, 0) + undeliveredAfter.reduce((s, i) => s + i.bonus, 0)).toFixed(2),
-          deliveredBonus: deliveredAfter.reduce((s, i) => s + i.bonus, 0).toFixed(2),
-          undeliveredBonus: undeliveredAfter.reduce((s, i) => s + i.bonus, 0).toFixed(2),
+          deliveredCount: filteredSaved.length,
+          undeliveredCount: selectedRows.length,
+          totalSales: allFiltered.reduce((s, i) => s + i.itemTotal, 0).toFixed(2),
+          totalBonus: allFiltered.reduce((s, i) => s + i.bonus, 0).toFixed(2),
+          deliveredBonus: filteredSaved.reduce((s, i) => s + i.bonus, 0).toFixed(2),
+          undeliveredBonus: selectedRows.reduce((s, i) => s + i.bonus, 0).toFixed(2),
           reportData,
         });
       } catch (reportErr) {
-        console.warn("Failed to save report, but delivery succeeded:", reportErr);
+        console.warn("Failed to save report:", reportErr);
       }
 
-      // Refresh
-      await refetchDelivered();
+      await refetchExisting();
       setSelectedInvoices(new Set());
-      setDeliveryTab("delivered");
 
-      setShowDeliveryDialog(false);
-      toast.success(`تم تسليم بونص ${selectedRows.length} فاتورة وحفظ التقرير بنجاح`);
-    } catch (error: any) {
-      if (error.message?.includes("Duplicate")) {
-        toast.warning("بعض الفواتير مسجلة مسبقاً، تم تجاوزها");
-        await refetchDelivered();
-        setSelectedInvoices(new Set());
+      if (skippedCount > 0) {
+        toast.success(`تم حفظ ${savedCount} فاتورة (تم تجاوز ${skippedCount} مكررة)`);
       } else {
-        toast.error("حدث خطأ أثناء تسليم البونص");
-        console.error(error);
+        toast.success(`تم حفظ ${savedCount} فاتورة بنجاح — انتقل لسجل التسليمات لتسليم البونص`);
       }
+    } catch (error: any) {
+      toast.error("حدث خطأ أثناء الحفظ");
+      console.error(error);
+    } finally {
+      setSaving(false);
     }
+  };
+
+  // Save and navigate to delivery log
+  const saveAndGoToDelivery = async () => {
+    await saveSelected();
+    navigate("/delivery-log");
   };
 
   // ==================== REFRESH ====================
   const refreshData = async () => {
     try {
       await clearCacheMutation.mutateAsync();
-      await Promise.all([refetchInvoices(), refetchPayments(), refetchCreditNotes(), refetchSettings(), refetchDelivered()]);
+      await Promise.all([refetchInvoices(), refetchPayments(), refetchCreditNotes(), refetchSettings(), refetchExisting()]);
       toast.success("تم تحديث البيانات بنجاح");
     } catch (error) {
       toast.error("فشل تحديث البيانات");
@@ -457,8 +407,41 @@ export default function Processing() {
       totalRow.font = { bold: true };
     };
 
-    addSheet("غير مسلم للمندوب", filterByRep(undeliveredInvoices), "FFDC2626");
-    addSheet("مسلم للمندوب", filterByRep(deliveredInvoices), "FF059669");
+    // Summary sheet
+    const summaryWs = workbook.addWorksheet("ملخص");
+    summaryWs.columns = [
+      { header: "المندوب", key: "rep", width: 25 },
+      { header: "عدد الفواتير الجديدة", key: "newCount", width: 18 },
+      { header: "عدد الفواتير المحفوظة", key: "savedCount", width: 18 },
+      { header: "مبيعات جديدة", key: "newSales", width: 18 },
+      { header: "بونص جديد", key: "newBonus", width: 15 },
+      { header: "بونص محفوظ", key: "savedBonus", width: 15 },
+    ];
+    styleHeader(summaryWs, "FF1E40AF");
+
+    const repSummary = new Map<string, { newCount: number; savedCount: number; newSales: number; newBonus: number; savedBonus: number }>();
+    filteredNew.forEach((inv) => {
+      const existing = repSummary.get(inv.rep) || { newCount: 0, savedCount: 0, newSales: 0, newBonus: 0, savedBonus: 0 };
+      existing.newCount++;
+      existing.newSales += inv.itemTotal;
+      existing.newBonus += inv.bonus;
+      repSummary.set(inv.rep, existing);
+    });
+    filteredSaved.forEach((inv) => {
+      const existing = repSummary.get(inv.rep) || { newCount: 0, savedCount: 0, newSales: 0, newBonus: 0, savedBonus: 0 };
+      existing.savedCount++;
+      existing.savedBonus += inv.bonus;
+      repSummary.set(inv.rep, existing);
+    });
+    repSummary.forEach((data, rep) => {
+      summaryWs.addRow({
+        rep: getRepDisplayName(rep), newCount: data.newCount, savedCount: data.savedCount,
+        newSales: data.newSales.toFixed(2), newBonus: data.newBonus.toFixed(2), savedBonus: data.savedBonus.toFixed(2),
+      });
+    });
+
+    addSheet("فواتير جديدة", filteredNew, "FF2563EB");
+    addSheet("فواتير محفوظة سابقاً", filteredSaved, "FF059669");
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
@@ -470,6 +453,22 @@ export default function Processing() {
     URL.revokeObjectURL(url);
     toast.success("تم تصدير التقرير بنجاح");
   };
+
+  // Computed values (must be before early returns)
+  const newBonus = useMemo(() => filteredNew.reduce((s, i) => s + i.bonus, 0), [filteredNew]);
+  const savedBonus = useMemo(() => filteredSaved.reduce((s, i) => s + i.bonus, 0), [filteredSaved]);
+  const newSales = useMemo(() => filteredNew.reduce((s, i) => s + i.itemTotal, 0), [filteredNew]);
+  const savedSales = useMemo(() => filteredSaved.reduce((s, i) => s + i.itemTotal, 0), [filteredSaved]);
+
+  // Target progress
+  const targetInfo = useMemo(() => {
+    if (selectedRep === "all" || !repsData?.reps) return null;
+    const rep = repsData.reps.find((r: any) => r.repEmail === selectedRep);
+    if (!rep?.monthlyTarget || rep.monthlyTarget === 0) return null;
+    const totalSales = newSales + savedSales;
+    const progress = Math.min((totalSales / rep.monthlyTarget) * 100, 100);
+    return { target: rep.monthlyTarget, totalSales, progress };
+  }, [selectedRep, repsData, newSales, savedSales]);
 
   // ==================== AUTH CHECK ====================
   if (authLoading) {
@@ -488,15 +487,11 @@ export default function Processing() {
     return <div className="flex items-center justify-center min-h-screen">جاري توجيهك لتسجيل الدخول...</div>;
   }
 
-  const undeliveredBonus = filteredUndelivered.reduce((s, i) => s + i.bonus, 0);
-  const deliveredBonus = filteredDelivered.reduce((s, i) => s + i.bonus, 0);
-  const undeliveredSales = filteredUndelivered.reduce((s, i) => s + i.itemTotal, 0);
-  const deliveredSales = filteredDelivered.reduce((s, i) => s + i.itemTotal, 0);
-
-  // ==================== INVOICE TABLE WITH CHECKBOXES ====================
-  const InvoiceTableWithSelect = ({ invoices, showCheckbox = false }: {
+  // ==================== INVOICE TABLE ====================
+  const InvoiceTable = ({ invoices, showCheckbox = false, emptyMessage = "لا توجد فواتير" }: {
     invoices: InvoiceRow[];
     showCheckbox?: boolean;
+    emptyMessage?: string;
   }) => (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -506,7 +501,7 @@ export default function Processing() {
               <th className="p-2 w-8">
                 <input
                   type="checkbox"
-                  checked={selectedInvoices.size === filteredUndelivered.length && filteredUndelivered.length > 0}
+                  checked={selectedInvoices.size === filteredNew.length && filteredNew.length > 0}
                   onChange={toggleSelectAll}
                   className="rounded border-gray-300"
                 />
@@ -528,7 +523,7 @@ export default function Processing() {
         </thead>
         <tbody>
           {invoices.length === 0 ? (
-            <tr><td colSpan={showCheckbox ? 13 : 12} className="text-center py-8 text-gray-400">لا توجد فواتير</td></tr>
+            <tr><td colSpan={showCheckbox ? 13 : 12} className="text-center py-8 text-gray-400">{emptyMessage}</td></tr>
           ) : invoices.map((inv) => (
             <tr key={inv.uniqueKey} className={`border-b hover:bg-gray-50/80 transition-colors ${showCheckbox && selectedInvoices.has(inv.uniqueKey) ? 'bg-blue-50' : ''}`}>
               {showCheckbox && (
@@ -580,11 +575,10 @@ export default function Processing() {
   // ==================== RENDER ====================
   return (
     <div className="min-h-screen bg-gray-50" dir="rtl">
-      {/* ===== HEADER ===== */}
+      {/* Header */}
       <div className="bg-white border-b shadow-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex flex-wrap justify-between items-center gap-3">
-            {/* Back + Title */}
             <div className="flex items-center gap-3">
               <Link href="/">
                 <Button variant="ghost" size="sm" className="gap-1">
@@ -596,11 +590,10 @@ export default function Processing() {
               </div>
               <div>
                 <h1 className="text-lg font-bold text-gray-900">معالجة وتصدير</h1>
-                <p className="text-[10px] text-gray-500">تسليم البونص للمناديب</p>
+                <p className="text-[10px] text-gray-500">حفظ الفواتير وتصدير التقارير</p>
               </div>
             </div>
 
-            {/* Actions */}
             <div className="flex items-center gap-2">
               <Link href="/delivery-log">
                 <Button variant="outline" size="sm" className="gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50">
@@ -623,7 +616,7 @@ export default function Processing() {
 
               <Button onClick={exportToExcel} disabled={!bonusData} variant="outline" size="sm" className="gap-1">
                 <FileDown className="h-3.5 w-3.5" />
-                تصدير
+                تصدير Excel
               </Button>
             </div>
           </div>
@@ -631,7 +624,7 @@ export default function Processing() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-4">
-        {/* ===== DATE RANGE FILTER ===== */}
+        {/* Date Range Filter */}
         <Card className="mb-4">
           <CardContent className="p-4">
             <div className="flex flex-wrap items-end gap-4">
@@ -670,35 +663,55 @@ export default function Processing() {
           </CardContent>
         </Card>
 
-        {/* ===== STATS ===== */}
+        {/* Target Progress */}
+        {targetInfo && (
+          <Card className="mb-4 border-indigo-200 bg-indigo-50/30">
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Target className="w-4 h-4 text-indigo-600" />
+                <span className="text-xs font-medium text-indigo-700">التارجت الشهري: {targetInfo.target.toLocaleString("ar-SA")} ر.س</span>
+                <span className="text-xs text-indigo-500 mr-auto">المبيعات: {targetInfo.totalSales.toLocaleString("ar-SA", { minimumFractionDigits: 2 })} ر.س</span>
+              </div>
+              <div className="w-full bg-indigo-200 rounded-full h-2.5">
+                <div
+                  className={`h-2.5 rounded-full transition-all ${targetInfo.progress >= 100 ? 'bg-green-500' : targetInfo.progress >= 75 ? 'bg-indigo-600' : targetInfo.progress >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                  style={{ width: `${Math.min(targetInfo.progress, 100)}%` }}
+                ></div>
+              </div>
+              <div className="text-[10px] text-indigo-600 mt-1 text-left">{targetInfo.progress.toFixed(1)}%</div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
           <Card className="border-blue-200 bg-blue-50/50">
             <CardContent className="p-3 text-center">
               <div className="text-[10px] text-blue-600 font-medium">إجمالي المبيعات</div>
-              <div className="text-sm font-bold text-blue-800">{(undeliveredSales + deliveredSales).toLocaleString("ar-SA", { minimumFractionDigits: 2 })} ر.س</div>
+              <div className="text-sm font-bold text-blue-800">{(newSales + savedSales).toLocaleString("ar-SA", { minimumFractionDigits: 2 })} ر.س</div>
             </CardContent>
           </Card>
           <Card className="border-indigo-200 bg-indigo-50/50">
             <CardContent className="p-3 text-center">
               <div className="text-[10px] text-indigo-600 font-medium">إجمالي البونص</div>
-              <div className="text-sm font-bold text-indigo-800">{(undeliveredBonus + deliveredBonus).toLocaleString("ar-SA", { minimumFractionDigits: 2 })} ر.س</div>
+              <div className="text-sm font-bold text-indigo-800">{(newBonus + savedBonus).toLocaleString("ar-SA", { minimumFractionDigits: 2 })} ر.س</div>
+            </CardContent>
+          </Card>
+          <Card className="border-amber-200 bg-amber-50/50">
+            <CardContent className="p-3 text-center">
+              <div className="text-[10px] text-amber-600 font-medium">فواتير جديدة</div>
+              <div className="text-sm font-bold text-amber-800">{filteredNew.length} ({newBonus.toFixed(2)} ر.س)</div>
             </CardContent>
           </Card>
           <Card className="border-green-200 bg-green-50/50">
             <CardContent className="p-3 text-center">
-              <div className="text-[10px] text-green-600 font-medium">بونص مسلم</div>
-              <div className="text-sm font-bold text-green-800">{deliveredBonus.toLocaleString("ar-SA", { minimumFractionDigits: 2 })} ر.س</div>
-            </CardContent>
-          </Card>
-          <Card className="border-orange-200 bg-orange-50/50">
-            <CardContent className="p-3 text-center">
-              <div className="text-[10px] text-orange-600 font-medium">بونص غير مسلم</div>
-              <div className="text-sm font-bold text-orange-800">{undeliveredBonus.toLocaleString("ar-SA", { minimumFractionDigits: 2 })} ر.س</div>
+              <div className="text-[10px] text-green-600 font-medium">محفوظة سابقاً</div>
+              <div className="text-sm font-bold text-green-800">{filteredSaved.length} ({savedBonus.toFixed(2)} ر.س)</div>
             </CardContent>
           </Card>
         </div>
 
-        {/* ===== LOADING ===== */}
+        {/* Loading */}
         {invoicesLoading && (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-3"></div>
@@ -706,223 +719,78 @@ export default function Processing() {
           </div>
         )}
 
-        {/* ===== DELIVERY TABS ===== */}
+        {/* New Invoices (not yet saved) */}
         {!invoicesLoading && (
-          <Tabs value={deliveryTab} onValueChange={setDeliveryTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-3">
-              <TabsTrigger value="undelivered" className="gap-1.5 text-xs data-[state=active]:bg-orange-500 data-[state=active]:text-white">
-                <Package2 className="w-3.5 h-3.5" />
-                غير مسلم للمندوب ({filteredUndelivered.length})
-              </TabsTrigger>
-              <TabsTrigger value="delivered" className="gap-1.5 text-xs data-[state=active]:bg-green-600 data-[state=active]:text-white">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                مسلم للمندوب ({filteredDelivered.length})
-              </TabsTrigger>
-            </TabsList>
+          <>
+            <Card className="mb-4">
+              <div className="flex items-center justify-between px-4 pt-3">
+                <h2 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
+                  فواتير جديدة (لم تُحفظ بعد) — {filteredNew.length}
+                </h2>
+              </div>
+              <CardContent className="p-3">
+                <InvoiceTable invoices={filteredNew} showCheckbox={true} emptyMessage="جميع الفواتير محفوظة مسبقاً" />
 
-            {/* غير مسلم */}
-            <TabsContent value="undelivered">
-              <Card>
-                <CardContent className="p-3">
-                  <InvoiceTableWithSelect invoices={filteredUndelivered} showCheckbox={true} />
-
-                  {/* Action buttons */}
-                  {filteredUndelivered.length > 0 && (
-                    <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                      <div className="text-sm text-gray-600">
-                        محدد: <span className="font-bold text-blue-600">{selectedInvoices.size}</span> من {filteredUndelivered.length} فاتورة
-                        {selectedInvoices.size > 0 && (
-                          <span className="mr-2">
-                            — بونص: <span className="font-bold text-emerald-600">
-                              {filteredUndelivered.filter((inv) => selectedInvoices.has(inv.uniqueKey)).reduce((s, i) => s + i.bonus, 0).toFixed(2)} ر.س
-                            </span>
+                {filteredNew.length > 0 && (
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                    <div className="text-sm text-gray-600">
+                      محدد: <span className="font-bold text-blue-600">{selectedInvoices.size}</span> من {filteredNew.length}
+                      {selectedInvoices.size > 0 && (
+                        <span className="mr-2">
+                          — بونص: <span className="font-bold text-emerald-600">
+                            {filteredNew.filter((inv) => selectedInvoices.has(inv.uniqueKey)).reduce((s, i) => s + i.bonus, 0).toFixed(2)} ر.س
                           </span>
-                        )}
-                      </div>
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
                       <Button
-                        onClick={openDeliveryDialog}
-                        disabled={selectedInvoices.size === 0}
+                        onClick={saveSelected}
+                        disabled={selectedInvoices.size === 0 || saving}
+                        variant="outline"
+                        className="gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50"
+                      >
+                        {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        حفظ المحدد
+                      </Button>
+                      <Button
+                        onClick={saveAndGoToDelivery}
+                        disabled={selectedInvoices.size === 0 || saving}
                         className="gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
                       >
-                        <Send className="h-4 w-4" />
-                        حفظ وتسليم البونص
+                        {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ClipboardList className="h-4 w-4" />}
+                        حفظ والانتقال للتسليمات
                       </Button>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-            {/* مسلم */}
-            <TabsContent value="delivered">
+            {/* Already Saved Invoices */}
+            {filteredSaved.length > 0 && (
               <Card>
+                <div className="flex items-center justify-between px-4 pt-3">
+                  <h2 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                    فواتير محفوظة سابقاً — {filteredSaved.length}
+                  </h2>
+                  <Link href="/delivery-log">
+                    <Button variant="ghost" size="sm" className="text-xs text-blue-600 gap-1">
+                      <ClipboardList className="w-3 h-3" />
+                      عرض في سجل التسليمات
+                    </Button>
+                  </Link>
+                </div>
                 <CardContent className="p-3">
-                  {filteredDelivered.length === 0 ? (
-                    <div className="text-center py-8 text-gray-400">
-                      <Package2 className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-                      <p className="text-sm font-medium">لم يتم تسليم أي بونص بعد</p>
-                      <p className="text-xs">اختر فواتير من تبويب "غير مسلم" ثم اضغط "حفظ وتسليم"</p>
-                    </div>
-                  ) : (
-                    <>
-                      <InvoiceTableWithSelect invoices={filteredDelivered} showCheckbox={false} />
-                      {/* Undo buttons for delivered invoices */}
-                      <div className="mt-3 pt-3 border-t">
-                        <p className="text-xs text-gray-500 mb-2">اضغط على الفاتورة للتراجع عن التسليم</p>
-                        <div className="flex flex-wrap gap-1">
-                          {filteredDelivered.map((inv) => (
-                            <Button
-                              key={inv.uniqueKey}
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2 text-[10px] text-red-500 hover:text-red-700 hover:bg-red-50 gap-1"
-                              onClick={() => setUndoConfirm({ invoiceId: inv.invoiceId, repEmail: inv.rep, reference: inv.reference })}
-                            >
-                              <Undo2 className="w-3 h-3" />
-                              {inv.reference}
-                            </Button>
-                          ))}
-                        </div>
-                      </div>
-                    </>
-                  )}
+                  <InvoiceTable invoices={filteredSaved} showCheckbox={false} />
                 </CardContent>
               </Card>
-            </TabsContent>
-          </Tabs>
+            )}
+          </>
         )}
       </div>
-
-      {/* ===== DELIVERY CONFIRMATION DIALOG ===== */}
-      {showDeliveryDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowDeliveryDialog(false)}>
-          <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
-                <Send className="w-5 h-5 text-emerald-600" />
-              </div>
-              <div>
-                <h3 className="font-bold text-gray-900">تأكيد تسليم البونص</h3>
-                <p className="text-sm text-gray-500">{selectedInvoices.size} فاتورة محددة</p>
-              </div>
-            </div>
-
-            {/* Summary */}
-            <div className="bg-gray-50 rounded-lg p-3 mb-4">
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-gray-600">إجمالي البونص:</span>
-                <span className="font-bold text-emerald-700">
-                  {filteredUndelivered.filter((inv) => selectedInvoices.has(inv.uniqueKey)).reduce((s, i) => s + i.bonus, 0).toFixed(2)} ر.س
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">عدد الفواتير:</span>
-                <span className="font-bold">{selectedInvoices.size}</span>
-              </div>
-            </div>
-
-            {/* Delivery Method */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">آلية التسليم</label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { value: "cash" as const, label: "نقد", icon: Banknote, color: "border-green-500 bg-green-50 text-green-700" },
-                  { value: "transfer" as const, label: "تحويل", icon: CreditCard, color: "border-blue-500 bg-blue-50 text-blue-700" },
-                  { value: "cheque" as const, label: "شيك", icon: Building2, color: "border-purple-500 bg-purple-50 text-purple-700" },
-                ].map((method) => {
-                  const Icon = method.icon;
-                  return (
-                    <button
-                      key={method.value}
-                      onClick={() => setDeliveryMethod(method.value)}
-                      className={`flex flex-col items-center gap-1 p-3 rounded-lg border-2 transition-all ${
-                        deliveryMethod === method.value ? method.color : "border-gray-200 hover:border-gray-300"
-                      }`}
-                    >
-                      <Icon className="w-5 h-5" />
-                      <span className="text-xs font-medium">{method.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Delivery Date */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">تاريخ التسليم</label>
-              <input
-                type="date"
-                value={deliveryDate}
-                onChange={(e) => setDeliveryDate(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-
-            {/* Notes */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-1">ملاحظات (اختياري)</label>
-              <textarea
-                value={deliveryNotes}
-                onChange={(e) => setDeliveryNotes(e.target.value)}
-                placeholder="أي ملاحظات إضافية..."
-                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 h-20 resize-none"
-              />
-            </div>
-
-            {/* Actions */}
-            <div className="flex gap-3 justify-end">
-              <Button variant="outline" onClick={() => setShowDeliveryDialog(false)}>إلغاء</Button>
-              <Button
-                className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 gap-1.5"
-                onClick={saveAndDeliver}
-                disabled={recordBonusMutation.isPending || markAsPaidMutation.isPending}
-              >
-                {recordBonusMutation.isPending || markAsPaidMutation.isPending ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="h-4 w-4" />
-                )}
-                تأكيد التسليم
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== UNDO CONFIRMATION DIALOG ===== */}
-      {undoConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setUndoConfirm(null)}>
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5 text-red-600" />
-              </div>
-              <div>
-                <h3 className="font-bold text-gray-900">تأكيد التراجع عن التسليم</h3>
-                <p className="text-sm text-gray-500">فاتورة {undoConfirm.reference}</p>
-              </div>
-            </div>
-            <p className="text-sm text-gray-600 mb-6">
-              هل أنت متأكد من التراجع عن تسليم بونص هذه الفاتورة؟ سيتم إرجاعها لقائمة "غير مسلم للمندوب".
-            </p>
-            <div className="flex gap-3 justify-end">
-              <Button variant="outline" onClick={() => setUndoConfirm(null)}>إلغاء</Button>
-              <Button
-                className="bg-red-600 hover:bg-red-700 text-white gap-1.5"
-                onClick={handleUndo}
-                disabled={undoMutation.isPending}
-              >
-                {undoMutation.isPending ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Undo2 className="h-4 w-4" />
-                )}
-                تأكيد التراجع
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
