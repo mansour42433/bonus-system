@@ -243,3 +243,133 @@ export async function clearCache(cacheKeyPattern?: string) {
     await db.delete(qoyodCache);
   }
 }
+
+
+// Bonus Payments Management
+export async function recordBonusPayment(
+  invoiceId: number,
+  invoiceReference: string,
+  repEmail: string,
+  bonusAmount: number,
+  bonusPercentage: number,
+  invoiceAmount: number,
+  invoiceDate: string,
+  paymentDate: string,
+  notes?: string
+) {
+  const db = await getDb();
+  if (!db) return;
+  
+  const { bonusPayments } = await import("../drizzle/schema");
+  
+  await db.insert(bonusPayments)
+    .values({
+      invoiceId,
+      invoiceReference,
+      repEmail,
+      bonusAmount,
+      bonusPercentage,
+      invoiceAmount,
+      invoiceDate,
+      paymentDate,
+      status: "unpaid",
+      notes,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        bonusAmount,
+        bonusPercentage,
+        invoiceAmount,
+        notes,
+      },
+    });
+}
+
+export async function markBonusAsPaid(invoiceIds: number[]) {
+  const db = await getDb();
+  if (!db) return;
+  
+  const { bonusPayments } = await import("../drizzle/schema");
+  const { inArray } = await import("drizzle-orm");
+  
+  await db.update(bonusPayments)
+    .set({ status: "paid", bonusPaymentDate: new Date() })
+    .where(inArray(bonusPayments.invoiceId, invoiceIds));
+}
+
+export async function getBonusPayments(
+  startDate?: string,
+  endDate?: string,
+  repEmail?: string,
+  status?: "paid" | "unpaid"
+) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { bonusPayments } = await import("../drizzle/schema");
+  const { and, gte, lte, eq } = await import("drizzle-orm");
+  
+  let conditions = [];
+  
+  if (startDate) {
+    conditions.push(gte(bonusPayments.paymentDate, startDate));
+  }
+  if (endDate) {
+    conditions.push(lte(bonusPayments.paymentDate, endDate));
+  }
+  if (repEmail) {
+    conditions.push(eq(bonusPayments.repEmail, repEmail));
+  }
+  if (status) {
+    conditions.push(eq(bonusPayments.status, status));
+  }
+  
+  const query = db.select().from(bonusPayments);
+  if (conditions.length > 0) {
+    return await query.where(and(...conditions));
+  }
+  return await query;
+}
+
+export async function getBonusSummary(
+  startDate?: string,
+  endDate?: string,
+  repEmail?: string
+) {
+  const db = await getDb();
+  if (!db) return { paid: 0, unpaid: 0, total: 0 };
+  
+  const { bonusPayments } = await import("../drizzle/schema");
+  const { and, gte, lte, eq, sql } = await import("drizzle-orm");
+  
+  let conditions = [];
+  
+  if (startDate) {
+    conditions.push(gte(bonusPayments.paymentDate, startDate));
+  }
+  if (endDate) {
+    conditions.push(lte(bonusPayments.paymentDate, endDate));
+  }
+  if (repEmail) {
+    conditions.push(eq(bonusPayments.repEmail, repEmail));
+  }
+  
+  const query = db.select({
+    status: bonusPayments.status,
+    total: sql<number>`SUM(${bonusPayments.bonusAmount})`,
+  })
+  .from(bonusPayments)
+  .groupBy(bonusPayments.status);
+  
+  const results = conditions.length > 0 
+    ? await query.where(and(...conditions))
+    : await query;
+  
+  let paid = 0, unpaid = 0;
+  results.forEach((row: any) => {
+    if (row.status === "paid") paid = row.total || 0;
+    if (row.status === "unpaid") unpaid = row.total || 0;
+  });
+  
+  return { paid, unpaid, total: paid + unpaid };
+}

@@ -339,6 +339,79 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+
+  bonusPayments: router({
+    record: protectedProcedure
+      .input((val: unknown) => {
+        if (typeof val === "object" && val !== null && "invoiceId" in val && "invoiceReference" in val && "repEmail" in val && "bonusAmount" in val && "bonusPercentage" in val && "invoiceAmount" in val && "invoiceDate" in val && "paymentDate" in val) {
+          return {
+            invoiceId: Number(val.invoiceId),
+            invoiceReference: String(val.invoiceReference),
+            repEmail: String(val.repEmail),
+            bonusAmount: Number(val.bonusAmount),
+            bonusPercentage: Number(val.bonusPercentage),
+            invoiceAmount: Number(val.invoiceAmount),
+            invoiceDate: String(val.invoiceDate),
+            paymentDate: String(val.paymentDate),
+            notes: "notes" in val ? String(val.notes) : undefined,
+          };
+        }
+        throw new Error("Invalid input for bonus payment record");
+      })
+      .mutation(async ({ input }) => {
+        const { recordBonusPayment } = await import("./db");
+        await recordBonusPayment(input.invoiceId, input.invoiceReference, input.repEmail, input.bonusAmount, input.bonusPercentage, input.invoiceAmount, input.invoiceDate, input.paymentDate, input.notes);
+        return { success: true };
+      }),
+
+    markAsPaid: protectedProcedure
+      .input((val: unknown) => {
+        if (Array.isArray(val) && val.every(id => typeof id === "number")) return val;
+        throw new Error("Invalid input: expected array of invoice IDs");
+      })
+      .mutation(async ({ input }) => {
+        const { markBonusAsPaid } = await import("./db");
+        await markBonusAsPaid(input);
+        return { success: true };
+      }),
+
+    list: protectedProcedure
+      .input((val: unknown) => {
+        if (typeof val === "object" && val !== null) {
+          const statusVal = "status" in val ? val.status : undefined;
+          const status = (statusVal === "paid" || statusVal === "unpaid") ? (statusVal as "paid" | "unpaid") : undefined;
+          return {
+            startDate: "startDate" in val && typeof val.startDate === "string" ? val.startDate : undefined,
+            endDate: "endDate" in val && typeof val.endDate === "string" ? val.endDate : undefined,
+            repEmail: "repEmail" in val && typeof val.repEmail === "string" ? val.repEmail : undefined,
+            status,
+          };
+        }
+        throw new Error("Invalid input for bonus payments list");
+      })
+      .query(async ({ input }) => {
+        const { getBonusPayments } = await import("./db");
+        const payments = await getBonusPayments(input.startDate, input.endDate, input.repEmail, input.status);
+        return { payments };
+      }),
+
+    summary: protectedProcedure
+      .input((val: unknown) => {
+        if (typeof val === "object" && val !== null) {
+          return {
+            startDate: "startDate" in val && typeof val.startDate === "string" ? val.startDate : undefined,
+            endDate: "endDate" in val && typeof val.endDate === "string" ? val.endDate : undefined,
+            repEmail: "repEmail" in val && typeof val.repEmail === "string" ? val.repEmail : undefined,
+          };
+        }
+        throw new Error("Invalid input for bonus summary");
+      })
+      .query(async ({ input }) => {
+        const { getBonusSummary } = await import("./db");
+        const summary = await getBonusSummary(input.startDate, input.endDate, input.repEmail);
+        return summary;
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

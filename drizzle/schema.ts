@@ -76,3 +76,28 @@ export const qoyodCache = mysqlTable("qoyodCache", {
 
 export type QoyodCache = typeof qoyodCache.$inferSelect;
 export type InsertQoyodCache = typeof qoyodCache.$inferInsert;
+
+/**
+ * Bonus Payments Tracking
+ * Tracks which invoices have had their bonus paid out
+ * Prevents double-counting of bonuses
+ */
+export const bonusPayments = mysqlTable("bonusPayments", {
+  id: int("id").autoincrement().primaryKey(),
+  invoiceId: int("invoiceId").notNull(), // Qoyod invoice ID
+  invoiceReference: varchar("invoiceReference", { length: 128 }).notNull(), // e.g., "INV4591"
+  repEmail: varchar("repEmail", { length: 320 }).notNull(), // المندوب
+  bonusAmount: int("bonusAmount").notNull(), // المبلغ المدفوع
+  bonusPercentage: int("bonusPercentage").notNull(), // 1 أو 2
+  invoiceAmount: int("invoiceAmount").notNull(), // إجمالي الفاتورة
+  invoiceDate: varchar("invoiceDate", { length: 10 }).notNull(), // YYYY-MM-DD
+  paymentDate: varchar("paymentDate", { length: 10 }).notNull(), // YYYY-MM-DD (تاريخ دفع الفاتورة)
+  bonusPaymentDate: timestamp("bonusPaymentDate").defaultNow().notNull(), // تاريخ دفع البونص
+  status: mysqlEnum("status", ["paid", "unpaid"]).default("unpaid").notNull(), // حالة البونص
+  notes: text("notes"), // ملاحظات إضافية
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type BonusPayment = typeof bonusPayments.$inferSelect;
+export type InsertBonusPayment = typeof bonusPayments.$inferInsert;
