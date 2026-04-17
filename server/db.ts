@@ -287,7 +287,11 @@ export async function recordBonusPayment(params: {
   return true;
 }
 
-export async function markBonusAsPaid(items: { invoiceId: number; repEmail: string }[]) {
+export async function markBonusAsPaid(items: { invoiceId: number; repEmail: string }[], deliveryInfo?: {
+  deliveryMethod?: "cash" | "transfer" | "cheque";
+  deliveryDate?: string;
+  notes?: string;
+}) {
   const db = await getDb();
   if (!db) return;
   
@@ -296,13 +300,53 @@ export async function markBonusAsPaid(items: { invoiceId: number; repEmail: stri
   
   // Update each item individually to ensure correct rep matching
   for (const item of items) {
+    const updateSet: any = { status: "paid", bonusPaymentDate: new Date() };
+    if (deliveryInfo?.deliveryMethod) updateSet.deliveryMethod = deliveryInfo.deliveryMethod;
+    if (deliveryInfo?.deliveryDate) updateSet.deliveryDate = deliveryInfo.deliveryDate;
+    if (deliveryInfo?.notes !== undefined) updateSet.notes = deliveryInfo.notes;
+    
     await db.update(bonusPayments)
-      .set({ status: "paid", bonusPaymentDate: new Date() } as any)
+      .set(updateSet)
       .where(and(
         eq(bonusPayments.invoiceId, item.invoiceId),
         eq(bonusPayments.repEmail, item.repEmail)
       ));
   }
+  return true;
+}
+
+// Undo delivery - revert paid status back to unpaid
+export async function undoDelivery(items: { invoiceId: number; repEmail: string }[]) {
+  const db = await getDb();
+  if (!db) return;
+  
+  const { bonusPayments } = await import("../drizzle/schema");
+  const { and, eq } = await import("drizzle-orm");
+  
+  for (const item of items) {
+    await db.update(bonusPayments)
+      .set({ status: "unpaid", deliveryMethod: null, deliveryDate: null, notes: null } as any)
+      .where(and(
+        eq(bonusPayments.invoiceId, item.invoiceId),
+        eq(bonusPayments.repEmail, item.repEmail)
+      ));
+  }
+  return true;
+}
+
+// Delete bonus payment record entirely
+export async function deleteBonusPayment(invoiceId: number, repEmail: string) {
+  const db = await getDb();
+  if (!db) return;
+  
+  const { bonusPayments } = await import("../drizzle/schema");
+  const { and, eq } = await import("drizzle-orm");
+  
+  await db.delete(bonusPayments)
+    .where(and(
+      eq(bonusPayments.invoiceId, invoiceId),
+      eq(bonusPayments.repEmail, repEmail)
+    ));
   return true;
 }
 

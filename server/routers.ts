@@ -366,12 +366,59 @@ export const appRouter = router({
 
     markAsPaid: protectedProcedure
       .input((val: unknown) => {
-        if (Array.isArray(val) && val.every((item: any) => typeof item === "object" && item !== null && typeof item.invoiceId === "number" && typeof item.repEmail === "string")) return val as { invoiceId: number; repEmail: string }[];
-        throw new Error("Invalid input: expected array of {invoiceId, repEmail}");
+        const v = val as any;
+        if (typeof v === "object" && v !== null && "items" in v && Array.isArray(v.items)) {
+          return {
+            items: v.items as { invoiceId: number; repEmail: string }[],
+            deliveryMethod: v.deliveryMethod as "cash" | "transfer" | "cheque" | undefined,
+            deliveryDate: v.deliveryDate as string | undefined,
+            notes: v.notes as string | undefined,
+          };
+        }
+        // Backward compatibility: accept plain array
+        if (Array.isArray(v)) {
+          return {
+            items: v as { invoiceId: number; repEmail: string }[],
+            deliveryMethod: undefined as "cash" | "transfer" | "cheque" | undefined,
+            deliveryDate: undefined as string | undefined,
+            notes: undefined as string | undefined,
+          };
+        }
+        throw new Error("Invalid input");
       })
       .mutation(async ({ input }) => {
         const { markBonusAsPaid } = await import("./db");
-        await markBonusAsPaid(input);
+        await markBonusAsPaid(input.items, {
+          deliveryMethod: input.deliveryMethod,
+          deliveryDate: input.deliveryDate,
+          notes: input.notes,
+        });
+        return { success: true };
+      }),
+
+    undoDelivery: protectedProcedure
+      .input((val: unknown) => {
+        if (Array.isArray(val) && val.every((item: any) => typeof item === "object" && item !== null && typeof item.invoiceId === "number" && typeof item.repEmail === "string")) {
+          return val as { invoiceId: number; repEmail: string }[];
+        }
+        throw new Error("Invalid input: expected array of {invoiceId, repEmail}");
+      })
+      .mutation(async ({ input }) => {
+        const { undoDelivery } = await import("./db");
+        await undoDelivery(input);
+        return { success: true };
+      }),
+
+    deleteRecord: protectedProcedure
+      .input((val: unknown) => {
+        if (typeof val === "object" && val !== null && "invoiceId" in val && "repEmail" in val) {
+          return { invoiceId: Number((val as any).invoiceId), repEmail: String((val as any).repEmail) };
+        }
+        throw new Error("Invalid input: invoiceId and repEmail required");
+      })
+      .mutation(async ({ input }) => {
+        const { deleteBonusPayment } = await import("./db");
+        await deleteBonusPayment(input.invoiceId, input.repEmail);
         return { success: true };
       }),
 

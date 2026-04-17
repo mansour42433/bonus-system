@@ -1,0 +1,6 @@
+v6.0 Progress Notes:
+- Schema updated: deliveryMethod (cash/transfer/cheque) + deliveryDate added to bonusPayments
+- Backend updated: markAsPaid accepts delivery info, undoDelivery endpoint added, deleteRecord endpoint added
+- TypeScript: No errors
+- Dashboard shows correctly with 118 paid, 48 unpaid, 7 returns
+- Next: Create DeliveryLog page, update Processing with delivery confirmation dialog, update Dashboard with target

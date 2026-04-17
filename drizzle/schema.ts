@@ -94,6 +94,8 @@ export const bonusPayments = mysqlTable("bonusPayments", {
   paymentDate: varchar("paymentDate", { length: 10 }).notNull(), // YYYY-MM-DD (تاريخ دفع الفاتورة)
   bonusPaymentDate: timestamp("bonusPaymentDate").defaultNow().notNull(), // تاريخ دفع البونص
   status: mysqlEnum("status", ["paid", "unpaid"]).default("unpaid").notNull(), // حالة البونص
+  deliveryMethod: mysqlEnum("deliveryMethod", ["cash", "transfer", "cheque"]).default("cash"), // آلية التسليم: نقد/تحويل/شيك
+  deliveryDate: varchar("deliveryDate", { length: 10 }), // YYYY-MM-DD تاريخ التسليم الفعلي
   notes: text("notes"), // ملاحظات إضافية
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

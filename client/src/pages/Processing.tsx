@@ -10,7 +10,8 @@ import ExcelJS from "exceljs";
 import { Link } from "wouter";
 import {
   ArrowRight, RefreshCw, CheckCircle2, Wallet,
-  FileDown, Package2, Send, Archive
+  FileDown, Package2, Send, Archive, ClipboardList,
+  Banknote, CreditCard, Building2, Undo2, AlertTriangle
 } from "lucide-react";
 
 // ==================== TYPES ====================
@@ -49,6 +50,13 @@ export default function Processing() {
   const [selectedRep, setSelectedRep] = useState<string>("all");
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set());
   const [deliveryTab, setDeliveryTab] = useState("undelivered");
+  // Delivery confirmation dialog
+  const [showDeliveryDialog, setShowDeliveryDialog] = useState(false);
+  const [deliveryMethod, setDeliveryMethod] = useState<"cash" | "transfer" | "cheque">("cash");
+  const [deliveryDate, setDeliveryDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [deliveryNotes, setDeliveryNotes] = useState("");
+  // Undo state
+  const [undoConfirm, setUndoConfirm] = useState<{ invoiceId: number; repEmail: string; reference: string } | null>(null);
 
   const dateRange = useMemo(() => ({ startDate, endDate }), [startDate, endDate]);
 
@@ -78,6 +86,7 @@ export default function Processing() {
   const recordBonusMutation = trpc.bonusPayments.record.useMutation();
   const markAsPaidMutation = trpc.bonusPayments.markAsPaid.useMutation();
   const saveReportMutation = trpc.savedReports.save.useMutation();
+  const undoMutation = trpc.bonusPayments.undoDelivery.useMutation();
 
   // Helper: rep display name
   const getRepDisplayName = useCallback((repEmail: string) => {
@@ -259,13 +268,33 @@ export default function Processing() {
     }
   };
 
-  // ==================== SAVE & DELIVER ====================
-  const saveAndDeliver = async () => {
+  // Open delivery dialog
+  const openDeliveryDialog = () => {
     if (selectedInvoices.size === 0) {
       toast.error("يرجى تحديد فاتورة واحدة على الأقل");
       return;
     }
+    setDeliveryDate(new Date().toISOString().split("T")[0]);
+    setDeliveryMethod("cash");
+    setDeliveryNotes("");
+    setShowDeliveryDialog(true);
+  };
 
+  // Undo delivery handler
+  const handleUndo = async () => {
+    if (!undoConfirm) return;
+    try {
+      await undoMutation.mutateAsync([{ invoiceId: undoConfirm.invoiceId, repEmail: undoConfirm.repEmail }]);
+      toast.success(`تم التراجع عن تسليم فاتورة ${undoConfirm.reference}`);
+      setUndoConfirm(null);
+      await refetchDelivered();
+    } catch (error) {
+      toast.error("فشل التراجع عن التسليم");
+    }
+  };
+
+  // ==================== SAVE & DELIVER ====================
+  const saveAndDeliver = async () => {
     const selectedRows = filteredUndelivered.filter((inv) => selectedInvoices.has(inv.uniqueKey));
 
     try {
@@ -280,16 +309,16 @@ export default function Processing() {
           invoiceAmount: row.itemTotal,
           invoiceDate: row.date,
           paymentDate: row.paymentDate,
-          notes: undefined,
+          notes: deliveryNotes || undefined,
         });
       }
 
-      // Mark as paid
+      // Mark as paid with delivery info
       const markPayload = selectedRows.map((row) => ({
         invoiceId: row.invoiceId,
         repEmail: row.rep,
       }));
-      await markAsPaidMutation.mutateAsync(markPayload);
+      await markAsPaidMutation.mutateAsync({ items: markPayload, deliveryMethod, deliveryDate, notes: deliveryNotes });
 
       // Save report to database
       const allFiltered = filterByRep(bonusData?.allRows || []);
@@ -356,6 +385,7 @@ export default function Processing() {
       setSelectedInvoices(new Set());
       setDeliveryTab("delivered");
 
+      setShowDeliveryDialog(false);
       toast.success(`تم تسليم بونص ${selectedRows.length} فاتورة وحفظ التقرير بنجاح`);
     } catch (error: any) {
       if (error.message?.includes("Duplicate")) {
@@ -572,6 +602,13 @@ export default function Processing() {
 
             {/* Actions */}
             <div className="flex items-center gap-2">
+              <Link href="/delivery-log">
+                <Button variant="outline" size="sm" className="gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50">
+                  <ClipboardList className="h-3.5 w-3.5" />
+                  سجل التسليمات
+                </Button>
+              </Link>
+
               <Link href="/saved-reports">
                 <Button variant="outline" size="sm" className="gap-1.5 border-purple-300 text-purple-700 hover:bg-purple-50">
                   <Archive className="h-3.5 w-3.5" />
@@ -703,15 +740,11 @@ export default function Processing() {
                         )}
                       </div>
                       <Button
-                        onClick={saveAndDeliver}
-                        disabled={selectedInvoices.size === 0 || recordBonusMutation.isPending || markAsPaidMutation.isPending}
+                        onClick={openDeliveryDialog}
+                        disabled={selectedInvoices.size === 0}
                         className="gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
                       >
-                        {recordBonusMutation.isPending || markAsPaidMutation.isPending ? (
-                          <RefreshCw className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Send className="h-4 w-4" />
-                        )}
+                        <Send className="h-4 w-4" />
                         حفظ وتسليم البونص
                       </Button>
                     </div>
@@ -731,7 +764,27 @@ export default function Processing() {
                       <p className="text-xs">اختر فواتير من تبويب "غير مسلم" ثم اضغط "حفظ وتسليم"</p>
                     </div>
                   ) : (
-                    <InvoiceTableWithSelect invoices={filteredDelivered} showCheckbox={false} />
+                    <>
+                      <InvoiceTableWithSelect invoices={filteredDelivered} showCheckbox={false} />
+                      {/* Undo buttons for delivered invoices */}
+                      <div className="mt-3 pt-3 border-t">
+                        <p className="text-xs text-gray-500 mb-2">اضغط على الفاتورة للتراجع عن التسليم</p>
+                        <div className="flex flex-wrap gap-1">
+                          {filteredDelivered.map((inv) => (
+                            <Button
+                              key={inv.uniqueKey}
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-[10px] text-red-500 hover:text-red-700 hover:bg-red-50 gap-1"
+                              onClick={() => setUndoConfirm({ invoiceId: inv.invoiceId, repEmail: inv.rep, reference: inv.reference })}
+                            >
+                              <Undo2 className="w-3 h-3" />
+                              {inv.reference}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
                   )}
                 </CardContent>
               </Card>
@@ -739,6 +792,137 @@ export default function Processing() {
           </Tabs>
         )}
       </div>
+
+      {/* ===== DELIVERY CONFIRMATION DIALOG ===== */}
+      {showDeliveryDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowDeliveryDialog(false)}>
+          <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
+                <Send className="w-5 h-5 text-emerald-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900">تأكيد تسليم البونص</h3>
+                <p className="text-sm text-gray-500">{selectedInvoices.size} فاتورة محددة</p>
+              </div>
+            </div>
+
+            {/* Summary */}
+            <div className="bg-gray-50 rounded-lg p-3 mb-4">
+              <div className="flex justify-between text-sm mb-1">
+                <span className="text-gray-600">إجمالي البونص:</span>
+                <span className="font-bold text-emerald-700">
+                  {filteredUndelivered.filter((inv) => selectedInvoices.has(inv.uniqueKey)).reduce((s, i) => s + i.bonus, 0).toFixed(2)} ر.س
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">عدد الفواتير:</span>
+                <span className="font-bold">{selectedInvoices.size}</span>
+              </div>
+            </div>
+
+            {/* Delivery Method */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">آلية التسليم</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { value: "cash" as const, label: "نقد", icon: Banknote, color: "border-green-500 bg-green-50 text-green-700" },
+                  { value: "transfer" as const, label: "تحويل", icon: CreditCard, color: "border-blue-500 bg-blue-50 text-blue-700" },
+                  { value: "cheque" as const, label: "شيك", icon: Building2, color: "border-purple-500 bg-purple-50 text-purple-700" },
+                ].map((method) => {
+                  const Icon = method.icon;
+                  return (
+                    <button
+                      key={method.value}
+                      onClick={() => setDeliveryMethod(method.value)}
+                      className={`flex flex-col items-center gap-1 p-3 rounded-lg border-2 transition-all ${
+                        deliveryMethod === method.value ? method.color : "border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
+                      <Icon className="w-5 h-5" />
+                      <span className="text-xs font-medium">{method.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Delivery Date */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">تاريخ التسليم</label>
+              <input
+                type="date"
+                value={deliveryDate}
+                onChange={(e) => setDeliveryDate(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
+            {/* Notes */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-1">ملاحظات (اختياري)</label>
+              <textarea
+                value={deliveryNotes}
+                onChange={(e) => setDeliveryNotes(e.target.value)}
+                placeholder="أي ملاحظات إضافية..."
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 h-20 resize-none"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 justify-end">
+              <Button variant="outline" onClick={() => setShowDeliveryDialog(false)}>إلغاء</Button>
+              <Button
+                className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 gap-1.5"
+                onClick={saveAndDeliver}
+                disabled={recordBonusMutation.isPending || markAsPaidMutation.isPending}
+              >
+                {recordBonusMutation.isPending || markAsPaidMutation.isPending ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
+                تأكيد التسليم
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== UNDO CONFIRMATION DIALOG ===== */}
+      {undoConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setUndoConfirm(null)}>
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900">تأكيد التراجع عن التسليم</h3>
+                <p className="text-sm text-gray-500">فاتورة {undoConfirm.reference}</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 mb-6">
+              هل أنت متأكد من التراجع عن تسليم بونص هذه الفاتورة؟ سيتم إرجاعها لقائمة "غير مسلم للمندوب".
+            </p>
+            <div className="flex gap-3 justify-end">
+              <Button variant="outline" onClick={() => setUndoConfirm(null)}>إلغاء</Button>
+              <Button
+                className="bg-red-600 hover:bg-red-700 text-white gap-1.5"
+                onClick={handleUndo}
+                disabled={undoMutation.isPending}
+              >
+                {undoMutation.isPending ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Undo2 className="h-4 w-4" />
+                )}
+                تأكيد التراجع
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -13,7 +13,8 @@ import { Link } from "wouter";
 import {
   Settings, RefreshCw, CheckCircle2,
   Clock, Wallet, Package, Layers,
-  FileDown, ArrowLeft, Undo2
+  FileDown, ArrowLeft, Undo2, ClipboardList,
+  Target, TrendingUp, Archive
 } from "lucide-react";
 
 // ==================== TYPES ====================
@@ -432,6 +433,76 @@ export default function Dashboard() {
       totalRow.font = { bold: true };
     };
 
+    // Summary sheet first
+    const summaryWs = workbook.addWorksheet("ملخص شامل");
+    summaryWs.columns = [
+      { header: "البيان", key: "label", width: 30 },
+      { header: "القيمة", key: "value", width: 25 },
+    ];
+    styleHeader(summaryWs, "FF1E3A5F");
+    const fp = filterByRep(bonusData.paidInvoices);
+    const fu = filterByRep(unpaidInvoices);
+    const fr = filterReturnsByRep(returnRows);
+    summaryWs.addRow({ label: "الفترة", value: `${startDate} إلى ${endDate}` });
+    summaryWs.addRow({ label: "المندوب", value: selectedRep === "all" ? "جميع المناديب" : getRepDisplayName(selectedRep) });
+    summaryWs.addRow({ label: "", value: "" });
+    summaryWs.addRow({ label: "مبيعات مدفوعة", value: fp.reduce((s, i) => s + i.itemTotal, 0).toFixed(2) + " ر.س" });
+    summaryWs.addRow({ label: "بونص مدفوع", value: fp.reduce((s, i) => s + i.bonus, 0).toFixed(2) + " ر.س" });
+    summaryWs.addRow({ label: "مبيعات آجلة", value: fu.reduce((s, i) => s + i.itemTotal, 0).toFixed(2) + " ر.س" });
+    summaryWs.addRow({ label: "بونص آجل", value: fu.reduce((s, i) => s + i.bonus, 0).toFixed(2) + " ر.س" });
+    summaryWs.addRow({ label: "مرتجعات", value: fr.reduce((s, r) => s + (isNaN(r.total) ? 0 : r.total), 0).toFixed(2) + " ر.س" });
+    summaryWs.addRow({ label: "", value: "" });
+    summaryWs.addRow({ label: "إجمالي المبيعات (مدفوع + آجل)", value: (fp.reduce((s, i) => s + i.itemTotal, 0) + fu.reduce((s, i) => s + i.itemTotal, 0)).toFixed(2) + " ر.س" });
+    summaryWs.addRow({ label: "إجمالي البونص (مدفوع + آجل)", value: (fp.reduce((s, i) => s + i.bonus, 0) + fu.reduce((s, i) => s + i.bonus, 0)).toFixed(2) + " ر.س" });
+    summaryWs.addRow({ label: "عدد الفواتير المدفوعة", value: String(fp.length) });
+    summaryWs.addRow({ label: "عدد الفواتير غير المدفوعة", value: String(fu.length) });
+    summaryWs.addRow({ label: "عدد المرتجعات", value: String(fr.length) });
+
+    // Target info if rep selected
+    if (selectedRep !== "all" && repsData?.reps) {
+      const repSetting = repsData.reps.find((r: any) => r.repEmail === selectedRep);
+      if (repSetting?.monthlyTarget && repSetting.monthlyTarget > 0) {
+        const currentSales = fp.reduce((s, i) => s + i.itemTotal, 0) + fu.reduce((s, i) => s + i.itemTotal, 0);
+        const progressPercent = Math.min(100, (currentSales / repSetting.monthlyTarget) * 100);
+        summaryWs.addRow({ label: "", value: "" });
+        summaryWs.addRow({ label: "التارجت الشهري", value: repSetting.monthlyTarget.toLocaleString() + " ر.س" });
+        summaryWs.addRow({ label: "نسبة التحقيق", value: progressPercent.toFixed(1) + "%" });
+      }
+    }
+
+    // Per-rep breakdown if "all" selected
+    if (selectedRep === "all" && uniqueReps.length > 1) {
+      const repSummaryWs = workbook.addWorksheet("ملخص المناديب");
+      repSummaryWs.columns = [
+        { header: "المندوب", key: "rep", width: 25 },
+        { header: "مبيعات مدفوعة", key: "paidSales", width: 18 },
+        { header: "بونص مدفوع", key: "paidBonus", width: 15 },
+        { header: "مبيعات آجلة", key: "unpaidSales", width: 18 },
+        { header: "بونص آجل", key: "unpaidBonus", width: 15 },
+        { header: "إجمالي البونص", key: "totalBonus", width: 15 },
+        { header: "التارجت", key: "target", width: 15 },
+        { header: "نسبة التحقيق", key: "progress", width: 12 },
+      ];
+      styleHeader(repSummaryWs, "FF6D28D9");
+      uniqueReps.forEach((rep: string) => {
+        const repPaid = bonusData.paidInvoices.filter((i) => i.rep === rep);
+        const repUnpaid = unpaidInvoices.filter((i) => i.rep === rep);
+        const repSetting = repsData?.reps?.find((r: any) => r.repEmail === rep);
+        const target = repSetting?.monthlyTarget || 0;
+        const totalSales = repPaid.reduce((s, i) => s + i.itemTotal, 0) + repUnpaid.reduce((s, i) => s + i.itemTotal, 0);
+        repSummaryWs.addRow({
+          rep: getRepDisplayName(rep),
+          paidSales: repPaid.reduce((s, i) => s + i.itemTotal, 0).toFixed(2),
+          paidBonus: repPaid.reduce((s, i) => s + i.bonus, 0).toFixed(2),
+          unpaidSales: repUnpaid.reduce((s, i) => s + i.itemTotal, 0).toFixed(2),
+          unpaidBonus: repUnpaid.reduce((s, i) => s + i.bonus, 0).toFixed(2),
+          totalBonus: (repPaid.reduce((s, i) => s + i.bonus, 0) + repUnpaid.reduce((s, i) => s + i.bonus, 0)).toFixed(2),
+          target: target > 0 ? target.toLocaleString() : "—",
+          progress: target > 0 ? ((totalSales / target) * 100).toFixed(1) + "%" : "—",
+        });
+      });
+    }
+
     addInvoiceSheet("فواتير مدفوعة", filterByRep(bonusData.paidInvoices), "FF059669");
     addInvoiceSheet("فواتير غير مدفوعة", filterByRep(unpaidInvoices), "FFDC2626");
 
@@ -667,6 +738,20 @@ export default function Dashboard() {
                 </Button>
               </Link>
 
+              <Link href="/delivery-log">
+                <Button variant="outline" size="sm" className="gap-1 border-blue-300 text-blue-700 hover:bg-blue-50">
+                  <ClipboardList className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">سجل التسليمات</span>
+                </Button>
+              </Link>
+
+              <Link href="/saved-reports">
+                <Button variant="outline" size="sm" className="gap-1 border-purple-300 text-purple-700 hover:bg-purple-50">
+                  <Archive className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">التقارير</span>
+                </Button>
+              </Link>
+
               <Button onClick={refreshData} disabled={clearCacheMutation.isPending} variant="outline" size="sm" className="gap-1">
                 <RefreshCw className={`h-3.5 w-3.5 ${clearCacheMutation.isPending ? 'animate-spin' : ''}`} />
                 <span className="hidden sm:inline">تحديث</span>
@@ -674,7 +759,7 @@ export default function Dashboard() {
 
               <Button onClick={exportToExcel} disabled={!bonusData} variant="outline" size="sm" className="gap-1">
                 <FileDown className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">تصدير Excel</span>
+                <span className="hidden sm:inline">تصدير شامل</span>
               </Button>
 
               <Link href="/settings">
@@ -716,6 +801,45 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
+
+        {/* ===== TARGET PROGRESS ===== */}
+        {selectedRep !== "all" && repsData?.reps && (() => {
+          const repSetting = repsData.reps.find((r: any) => r.repEmail === selectedRep);
+          const monthlyTarget = repSetting?.monthlyTarget || 0;
+          if (monthlyTarget <= 0) return null;
+          const currentSales = paidTotal + unpaidTotal;
+          const progressPercent = Math.min(100, (currentSales / monthlyTarget) * 100);
+          return (
+            <Card className="mb-4 border-indigo-200 bg-gradient-to-l from-indigo-50 to-white">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Target className="w-4 h-4 text-indigo-600" />
+                    <span className="text-sm font-bold text-gray-800">التارجت الشهري - {getRepDisplayName(selectedRep)}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500">{currentSales.toLocaleString("ar-SA", { minimumFractionDigits: 0 })} / {monthlyTarget.toLocaleString("ar-SA")} ر.س</span>
+                    <span className={`text-sm font-bold ${progressPercent >= 100 ? 'text-green-600' : progressPercent >= 70 ? 'text-indigo-600' : 'text-orange-600'}`}>
+                      {progressPercent.toFixed(0)}%
+                    </span>
+                  </div>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${progressPercent >= 100 ? 'bg-green-500' : progressPercent >= 70 ? 'bg-indigo-500' : 'bg-orange-500'}`}
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                {progressPercent >= 100 && (
+                  <div className="flex items-center gap-1 mt-2 text-green-600">
+                    <TrendingUp className="w-3.5 h-3.5" />
+                    <span className="text-xs font-medium">تم تحقيق التارجت! تجاوز بمبلغ {(currentSales - monthlyTarget).toLocaleString("ar-SA", { minimumFractionDigits: 2 })} ر.س</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })()}
 
         {/* ===== QUICK STATS ===== */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
