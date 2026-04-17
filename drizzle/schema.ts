@@ -1,4 +1,4 @@
-import { boolean, int, mediumtext, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { boolean, int, mediumtext, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -97,7 +97,9 @@ export const bonusPayments = mysqlTable("bonusPayments", {
   notes: text("notes"), // ملاحظات إضافية
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ([
+  uniqueIndex("unique_invoice_rep").on(table.invoiceId, table.repEmail),
+]));
 
 export type BonusPayment = typeof bonusPayments.$inferSelect;
 export type InsertBonusPayment = typeof bonusPayments.$inferInsert;

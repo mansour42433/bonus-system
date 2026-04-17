@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
-import { ArrowRight, Save, ToggleLeft, ToggleRight } from "lucide-react";
+import { ArrowRight, Save, ToggleLeft, ToggleRight, Download, Database } from "lucide-react";
+import ExcelJS from "exceljs";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
@@ -147,6 +148,151 @@ function RepSettingsSection() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Backup Export Section Component
+function BackupExportSection() {
+  const { data: allBonusData, isLoading, refetch } = trpc.bonusPayments.exportAll.useQuery();
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    if (!allBonusData?.payments || allBonusData.payments.length === 0) {
+      toast.error("لا توجد بيانات للتصدير");
+      return;
+    }
+    setExporting(true);
+    try {
+      const workbook = new ExcelJS.Workbook();
+
+      // Sheet 1: All bonus payments
+      const sheet1 = workbook.addWorksheet("البونص المسلم");
+      sheet1.columns = [
+        { header: "رقم الفاتورة", key: "invoiceReference", width: 18 },
+        { header: "المندوب", key: "repEmail", width: 25 },
+        { header: "مبلغ البونص (ريال)", key: "bonusAmount", width: 18 },
+        { header: "النسبة", key: "bonusPercentage", width: 10 },
+        { header: "مبلغ الفاتورة (ريال)", key: "invoiceAmount", width: 20 },
+        { header: "تاريخ الفاتورة", key: "invoiceDate", width: 15 },
+        { header: "تاريخ الدفع", key: "paymentDate", width: 15 },
+        { header: "تاريخ التسليم", key: "paidAt", width: 20 },
+        { header: "الحالة", key: "status", width: 12 },
+        { header: "ملاحظات", key: "notes", width: 30 },
+      ];
+      sheet1.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+      sheet1.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF059669" } };
+      sheet1.getRow(1).alignment = { horizontal: "center", vertical: "middle" };
+      sheet1.getRow(1).height = 25;
+
+      allBonusData.payments.forEach((bp: any) => {
+        sheet1.addRow({
+          invoiceReference: bp.invoiceReference,
+          repEmail: bp.repEmail,
+          bonusAmount: (bp.bonusAmount / 100).toFixed(2),
+          bonusPercentage: `${bp.bonusPercentage}%`,
+          invoiceAmount: (bp.invoiceAmount / 100).toFixed(2),
+          invoiceDate: bp.invoiceDate,
+          paymentDate: bp.paymentDate,
+          paidAt: bp.paidAt ? new Date(bp.paidAt).toLocaleString("ar-SA") : "—",
+          status: bp.status === "paid" ? "مسلم" : "غير مسلم",
+          notes: bp.notes || "",
+        });
+      });
+
+      // Total row
+      const totalBonus = allBonusData.payments.reduce((s: number, bp: any) => s + bp.bonusAmount, 0);
+      const totalInvoice = allBonusData.payments.reduce((s: number, bp: any) => s + bp.invoiceAmount, 0);
+      const totalRow = sheet1.addRow({
+        invoiceReference: "",
+        repEmail: "الإجمالي",
+        bonusAmount: (totalBonus / 100).toFixed(2),
+        bonusPercentage: "",
+        invoiceAmount: (totalInvoice / 100).toFixed(2),
+        invoiceDate: "",
+        paymentDate: "",
+        paidAt: "",
+        status: "",
+        notes: "",
+      });
+      totalRow.font = { bold: true, size: 11 };
+      totalRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1FAE5" } };
+
+      // Sheet 2: Summary by rep
+      const sheet2 = workbook.addWorksheet("ملخص حسب المندوب");
+      sheet2.columns = [
+        { header: "المندوب", key: "rep", width: 30 },
+        { header: "عدد الفواتير", key: "count", width: 15 },
+        { header: "إجمالي البونص (ريال)", key: "totalBonus", width: 20 },
+        { header: "إجمالي المبيعات (ريال)", key: "totalSales", width: 20 },
+      ];
+      sheet2.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+      sheet2.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E40AF" } };
+      sheet2.getRow(1).alignment = { horizontal: "center", vertical: "middle" };
+      sheet2.getRow(1).height = 25;
+
+      const repSummary = new Map<string, { count: number; totalBonus: number; totalSales: number }>();
+      allBonusData.payments.forEach((bp: any) => {
+        const existing = repSummary.get(bp.repEmail) || { count: 0, totalBonus: 0, totalSales: 0 };
+        existing.count += 1;
+        existing.totalBonus += bp.bonusAmount;
+        existing.totalSales += bp.invoiceAmount;
+        repSummary.set(bp.repEmail, existing);
+      });
+      repSummary.forEach((summary, rep) => {
+        sheet2.addRow({
+          rep,
+          count: summary.count,
+          totalBonus: (summary.totalBonus / 100).toFixed(2),
+          totalSales: (summary.totalSales / 100).toFixed(2),
+        });
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `نسخة-احتياطية-البونص-${new Date().toISOString().split("T")[0]}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success("تم تصدير النسخة الاحتياطية بنجاح");
+    } catch (error) {
+      toast.error("فشل تصدير النسخة الاحتياطية");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-4">
+        <div className="flex-1">
+          <p className="text-sm text-gray-600">
+            عدد السجلات: <strong>{allBonusData?.payments?.length || 0}</strong> تسليم بونص محفوظ
+          </p>
+        </div>
+        <Button
+          onClick={handleExport}
+          disabled={exporting || isLoading || !allBonusData?.payments?.length}
+          variant="outline"
+          className="gap-2 border-amber-400 text-amber-700 hover:bg-amber-50"
+        >
+          <Download className="w-4 h-4" />
+          {exporting ? "جاري التصدير..." : "تصدير نسخة احتياطية"}
+        </Button>
+        <Button
+          onClick={() => refetch()}
+          disabled={isLoading}
+          variant="ghost"
+          size="sm"
+        >
+          تحديث
+        </Button>
+      </div>
+      <p className="text-xs text-gray-400">
+        التصدير يحتوي على ورقتين: (1) جميع البونصات المسلمة بالتفصيل (2) ملخص حسب المندوب
+      </p>
     </div>
   );
 }
@@ -393,6 +539,22 @@ export default function Settings() {
           </CardHeader>
           <CardContent>
             <RepSettingsSection />
+          </CardContent>
+        </Card>
+
+        {/* Backup Export Section */}
+        <Card className="mt-8 border-amber-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Database className="w-5 h-5 text-amber-600" />
+              تصدير احتياطي
+            </CardTitle>
+            <CardDescription>
+              تصدير جميع بيانات البونص المسلمة من قاعدة البيانات كنسخة احتياطية.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <BackupExportSection />
           </CardContent>
         </Card>
 

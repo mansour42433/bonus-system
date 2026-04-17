@@ -55,13 +55,13 @@ export default function Dashboard() {
   const { data: settingsData, refetch: refetchSettings } = trpc.settings.list.useQuery();
   const { data: repsData } = trpc.reps.list.useQuery();
 
-  // Fetch delivered bonuses from DB
+  // Fetch delivered bonuses from DB - filter by the SAME date range for month independence
   const { data: deliveredBonusData, refetch: refetchDelivered } =
     trpc.bonusPayments.list.useQuery({
       startDate,
       endDate,
       repEmail: undefined,
-      status: undefined,
+      status: "paid",
     }, { enabled: validDates });
 
   // Mutations
@@ -84,7 +84,7 @@ export default function Dashboard() {
     const payments = paymentsData?.payments || [];
     const deliveredList = deliveredBonusData?.payments || [];
 
-    // Set of delivered invoice keys
+    // Set of delivered invoice keys (invoiceId-repEmail) for THIS date range
     const deliveredInvoiceKeys = new Set<string>();
     deliveredList.forEach((bp: any) => {
       deliveredInvoiceKeys.add(`${bp.invoiceId}-${bp.repEmail}`);
@@ -141,7 +141,6 @@ export default function Dashboard() {
 
     const undeliveredInvoices: any[] = [];
     const deliveredInvoices: any[] = [];
-    const pendingInvoices: any[] = [];
 
     // Product analysis
     const productAnalysis = new Map<string, {
@@ -160,14 +159,17 @@ export default function Dashboard() {
     invoices.forEach((invoice: any) => {
       const paymentDate = paymentDates.get(invoice.id);
 
-      let isInDateRange = false;
+      // Check if invoice has payment in date range
+      let hasPaidInRange = false;
       if (paymentDate) {
         const pd = new Date(paymentDate);
-        isInDateRange = pd >= rangeStart && pd <= rangeEnd;
+        hasPaidInRange = pd >= rangeStart && pd <= rangeEnd;
       }
 
-      const isPaid = isInDateRange;
-      const isPending = !isInDateRange && (invoice.status === "Approved");
+      // isPending = Approved but no payment in this range
+      const isPending = !hasPaidInRange && (invoice.status === "Approved");
+      // isPaid = has payment in this range
+      const isPaid = hasPaidInRange;
 
       if (!isPaid && !isPending) return;
 
@@ -192,22 +194,23 @@ export default function Dashboard() {
         const bonus2Enabled = setting?.bonus2Enabled !== undefined ? setting.bonus2Enabled : true;
 
         let percentage = 0;
-        let category = "لا بونص";
+        let bonusCategory = "لا بونص";
         if (priceWithTax > 0) {
           if (priceWithTax >= premiumPrice && bonus2Enabled) {
             percentage = 2;
-            category = "تميز";
+            bonusCategory = "تميز";
           } else if (priceWithTax < premiumPrice && bonus1Enabled) {
             percentage = 1;
-            category = "أساسي";
+            bonusCategory = "أساسي";
           } else if (priceWithTax >= premiumPrice && !bonus2Enabled && bonus1Enabled) {
             percentage = 1;
-            category = "أساسي";
+            bonusCategory = "أساسي";
           }
         }
 
         const bonus = itemTotal * (percentage / 100);
-        const isDelivered = deliveredInvoiceKeys.has(`${invoice.id}-${invoice.created_by}`);
+        const isDeliveredKey = `${invoice.id}-${invoice.created_by}`;
+        const isDelivered = deliveredInvoiceKeys.has(isDeliveredKey);
 
         const invoiceRow = {
           uniqueKey: `${invoice.id}-${item.product_id}-${invoice.created_by}`,
@@ -221,48 +224,44 @@ export default function Dashboard() {
           returnedQty,
           price: priceWithTax,
           itemTotal,
-          category,
+          category: bonusCategory,
           percentage,
           bonus,
           date: paymentDate || invoice.issue_date,
+          isPending, // flag for pending invoices
+          paymentStatus: isPaid ? "مدفوعة" : "آجلة",
         };
 
-        // Product analysis (only paid invoices)
-        if (isPaid) {
-          totalSales += itemTotal;
-          if (percentage === 1) sales1Percent += itemTotal;
-          if (percentage === 2) sales2Percent += itemTotal;
-          totalBonus += bonus;
+        // Track sales for all (paid + pending)
+        totalSales += itemTotal;
+        if (percentage === 1) sales1Percent += itemTotal;
+        if (percentage === 2) sales2Percent += itemTotal;
+        totalBonus += bonus;
 
-          const prodKey = String(item.product_id);
-          const existing = productAnalysis.get(prodKey) || {
-            productId: item.product_id,
-            name: setting?.productName || item.product_name,
-            quantity: 0,
-            totalSales: 0,
-            totalBonus: 0,
-            sellCount: 0,
-            category: category,
-          };
-          existing.quantity += actualQuantity;
-          existing.totalSales += itemTotal;
-          existing.totalBonus += bonus;
-          existing.sellCount += 1;
-          productAnalysis.set(prodKey, existing);
+        // Product analysis
+        const prodKey = String(item.product_id);
+        const existing = productAnalysis.get(prodKey) || {
+          productId: item.product_id,
+          name: setting?.productName || item.product_name,
+          quantity: 0,
+          totalSales: 0,
+          totalBonus: 0,
+          sellCount: 0,
+          category: bonusCategory,
+        };
+        existing.quantity += actualQuantity;
+        existing.totalSales += itemTotal;
+        existing.totalBonus += bonus;
+        existing.sellCount += 1;
+        productAnalysis.set(prodKey, existing);
 
-          if (isDelivered) {
-            deliveredBonus += bonus;
-            deliveredInvoices.push(invoiceRow);
-          } else {
-            undeliveredBonus += bonus;
-            undeliveredInvoices.push(invoiceRow);
-          }
+        // Separate delivered vs undelivered
+        if (isDelivered) {
+          deliveredBonus += bonus;
+          deliveredInvoices.push(invoiceRow);
         } else {
-          pendingInvoices.push({
-            ...invoiceRow,
-            status: "آجل - غير مدفوعة",
-            expectedBonus: bonus,
-          });
+          undeliveredBonus += bonus;
+          undeliveredInvoices.push(invoiceRow);
         }
       });
     });
@@ -297,7 +296,6 @@ export default function Dashboard() {
       undeliveredBonus,
       undeliveredInvoices,
       deliveredInvoices,
-      pendingInvoices,
       productAnalysis: Array.from(productAnalysis.values()).sort((a, b) => b.totalSales - a.totalSales),
       categoryAnalysis: Array.from(categoryAnalysis.values()).sort((a, b) => b.totalSales - a.totalSales),
     };
@@ -347,11 +345,12 @@ export default function Dashboard() {
     }
   };
 
-  // Deliver bonus
+  // Deliver bonus - works for both paid and pending invoices
   const deliverBonus = async () => {
     if (!bonusData || selectedInvoices.size === 0) return;
     setIsDelivering(true);
     try {
+      // Group selected items by invoiceId-rep
       const invoiceGroups = new Map<string, any[]>();
       bonusData.undeliveredInvoices
         .filter((inv: any) => selectedInvoices.has(inv.uniqueKey))
@@ -361,6 +360,7 @@ export default function Dashboard() {
           invoiceGroups.get(groupKey)!.push(inv);
         });
 
+      // Record each invoice group
       for (const [, items] of Array.from(invoiceGroups.entries())) {
         const totalBonus = items.reduce((sum: number, inv: any) => sum + inv.bonus, 0);
         const totalAmount = items.reduce((sum: number, inv: any) => sum + inv.itemTotal, 0);
@@ -376,13 +376,17 @@ export default function Dashboard() {
           invoiceAmount: Math.round(totalAmount * 100),
           invoiceDate: firstItem.date,
           paymentDate: firstItem.date,
-          notes: `تسليم بونص ${items.length} منتج - ${firstItem.customer}`,
+          notes: `تسليم بونص ${items.length} منتج - ${firstItem.customer} - ${firstItem.isPending ? "آجلة" : "مدفوعة"}`,
         });
       }
 
-      const invoiceIds = Array.from(invoiceGroups.keys()).map(key => parseInt(key.split("-")[0]));
-      if (invoiceIds.length > 0) {
-        await markAsPaidMutation.mutateAsync(invoiceIds);
+      // Mark all as paid
+      const invoiceItems = Array.from(invoiceGroups.entries()).map(([key]) => ({
+        invoiceId: parseInt(key.split("-")[0]),
+        repEmail: key.split("-").slice(1).join("-"),
+      }));
+      if (invoiceItems.length > 0) {
+        await markAsPaidMutation.mutateAsync(invoiceItems);
       }
 
       setSelectedInvoices(new Set());
@@ -440,9 +444,8 @@ export default function Dashboard() {
     summarySheet.addRow({ label: "البونص غير المسلم", value: bonusData.undeliveredBonus.toFixed(2) + " ريال" });
     summarySheet.addRow({ label: "عدد الفواتير (بونص غير مسلم)", value: bonusData.undeliveredInvoices.length });
     summarySheet.addRow({ label: "عدد الفواتير (بونص مسلم)", value: bonusData.deliveredInvoices.length });
-    summarySheet.addRow({ label: "عدد الفواتير الآجلة", value: bonusData.pendingInvoices.length });
 
-    // ===== ورقة 2: بونص غير مسلم (تفاصيل الفواتير) =====
+    // ===== ورقة 2: بونص غير مسلم (مدفوعة + آجلة مدمجة) =====
     const undeliveredSheet = workbook.addWorksheet("بونص غير مسلم");
     undeliveredSheet.columns = [
       { header: "رقم الفاتورة", key: "reference", width: 15 },
@@ -456,6 +459,7 @@ export default function Dashboard() {
       { header: "الفئة", key: "category", width: 12 },
       { header: "النسبة", key: "percentage", width: 10 },
       { header: "البونص", key: "bonus", width: 12 },
+      { header: "حالة الفاتورة", key: "paymentStatus", width: 15 },
       { header: "تاريخ الدفع", key: "date", width: 14 },
     ];
     styleHeader(undeliveredSheet, "FFDC2626");
@@ -472,6 +476,7 @@ export default function Dashboard() {
         category: inv.category,
         percentage: `${inv.percentage}%`,
         bonus: inv.bonus.toFixed(2),
+        paymentStatus: inv.paymentStatus,
         date: inv.date,
       });
     });
@@ -483,7 +488,7 @@ export default function Dashboard() {
       total: undeliveredTotalSales.toFixed(2),
       category: "", percentage: "",
       bonus: undeliveredTotalBonus.toFixed(2),
-      date: "",
+      paymentStatus: "", date: "",
     }, "FFFECACA");
 
     // ===== ورقة 3: بونص مسلم =====
@@ -528,31 +533,7 @@ export default function Dashboard() {
       date: "",
     }, "FFD1FAE5");
 
-    // ===== ورقة 4: فواتير آجلة =====
-    const pendingSheet = workbook.addWorksheet("فواتير آجلة");
-    pendingSheet.columns = [
-      { header: "رقم الفاتورة", key: "reference", width: 15 },
-      { header: "المندوب", key: "rep", width: 20 },
-      { header: "العميل", key: "customer", width: 25 },
-      { header: "المنتج", key: "product", width: 30 },
-      { header: "الكمية", key: "quantity", width: 10 },
-      { header: "البونص المتوقع", key: "expectedBonus", width: 15 },
-      { header: "الحالة", key: "status", width: 20 },
-    ];
-    styleHeader(pendingSheet, "FFD97706");
-    bonusData.pendingInvoices.forEach((inv: any) => {
-      pendingSheet.addRow({
-        reference: inv.reference,
-        rep: getRepDisplayName(inv.rep),
-        customer: inv.customer,
-        product: inv.product,
-        quantity: inv.quantity,
-        expectedBonus: inv.expectedBonus.toFixed(2),
-        status: inv.status,
-      });
-    });
-
-    // ===== ورقة 5: تقرير المنتجات =====
+    // ===== ورقة 4: تقرير المنتجات =====
     const productSheet = workbook.addWorksheet("تقرير المنتجات");
     productSheet.columns = [
       { header: "المنتج", key: "name", width: 35 },
@@ -575,15 +556,14 @@ export default function Dashboard() {
     });
     const prodTotalSales = bonusData.productAnalysis.reduce((s, p) => s + p.totalSales, 0);
     const prodTotalBonus = bonusData.productAnalysis.reduce((s, p) => s + p.totalBonus, 0);
-    const prodTotalQty = bonusData.productAnalysis.reduce((s, p) => s + p.quantity, 0);
     addTotalRow(productSheet, {
-      name: "الإجمالي", quantity: prodTotalQty,
+      name: "الإجمالي", quantity: bonusData.productAnalysis.reduce((s, p) => s + p.quantity, 0),
       totalSales: prodTotalSales.toFixed(2), totalBonus: prodTotalBonus.toFixed(2),
       sellCount: bonusData.productAnalysis.reduce((s, p) => s + p.sellCount, 0),
       category: "",
     }, "FFEDE9FE");
 
-    // ===== ورقة 6: تقرير الأصناف =====
+    // ===== ورقة 5: تقرير الأصناف =====
     const categorySheet = workbook.addWorksheet("تقرير الأصناف");
     categorySheet.columns = [
       { header: "الصنف", key: "name", width: 20 },
@@ -644,7 +624,10 @@ export default function Dashboard() {
   // ==================== FILTERED DATA ====================
   const filteredUndelivered = bonusData ? filterByRep(bonusData.undeliveredInvoices) : [];
   const filteredDelivered = bonusData ? filterByRep(bonusData.deliveredInvoices) : [];
-  const filteredPending = bonusData ? filterByRep(bonusData.pendingInvoices) : [];
+
+  // Count pending (آجلة) in undelivered
+  const pendingCount = filteredUndelivered.filter((inv: any) => inv.isPending).length;
+  const paidUndeliveredCount = filteredUndelivered.filter((inv: any) => !inv.isPending).length;
 
   const filteredStats = bonusData ? {
     totalSales: [...filteredUndelivered, ...filteredDelivered].reduce((sum, inv: any) => sum + inv.itemTotal, 0),
@@ -656,12 +639,12 @@ export default function Dashboard() {
   } : null;
 
   // ==================== RENDER ====================
-  // Invoice table component
-  const InvoiceTable = ({ invoices, showCheckbox = false, headerColor = "bg-gray-50", showReturn = false }: {
+  const InvoiceTable = ({ invoices, showCheckbox = false, headerColor = "bg-gray-50", showReturn = false, showPaymentStatus = false }: {
     invoices: any[];
     showCheckbox?: boolean;
     headerColor?: string;
     showReturn?: boolean;
+    showPaymentStatus?: boolean;
   }) => (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -686,6 +669,7 @@ export default function Dashboard() {
             <th className="text-right p-2">الفئة</th>
             <th className="text-right p-2">النسبة</th>
             <th className="text-right p-2">البونص</th>
+            {showPaymentStatus && <th className="text-right p-2">حالة الفاتورة</th>}
             <th className="text-right p-2">التاريخ</th>
           </tr>
         </thead>
@@ -693,7 +677,7 @@ export default function Dashboard() {
           {invoices.map((inv: any) => (
             <tr
               key={inv.uniqueKey || inv.reference + inv.product}
-              className={`border-b hover:bg-gray-50 ${showCheckbox ? 'cursor-pointer' : ''} ${showCheckbox && selectedInvoices.has(inv.uniqueKey) ? 'bg-blue-50' : ''}`}
+              className={`border-b hover:bg-gray-50 ${showCheckbox ? 'cursor-pointer' : ''} ${showCheckbox && selectedInvoices.has(inv.uniqueKey) ? 'bg-blue-50' : ''} ${inv.isPending ? 'bg-yellow-50/40' : ''}`}
               onClick={showCheckbox ? () => toggleInvoice(inv.uniqueKey) : undefined}
             >
               {showCheckbox && (
@@ -719,6 +703,13 @@ export default function Dashboard() {
               </td>
               <td className="p-2">{inv.percentage}%</td>
               <td className="p-2 font-semibold text-blue-600">{inv.bonus.toFixed(2)}</td>
+              {showPaymentStatus && (
+                <td className="p-2">
+                  <span className={`px-2 py-0.5 rounded text-xs ${inv.isPending ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"}`}>
+                    {inv.paymentStatus}
+                  </span>
+                </td>
+              )}
               <td className="p-2 text-xs text-gray-500">{inv.date}</td>
             </tr>
           ))}
@@ -730,6 +721,7 @@ export default function Dashboard() {
             <td className="p-2">{invoices.reduce((s: number, i: any) => s + i.itemTotal, 0).toFixed(2)}</td>
             <td className="p-2" colSpan={2}></td>
             <td className="p-2 text-blue-600">{invoices.reduce((s: number, i: any) => s + i.bonus, 0).toFixed(2)}</td>
+            {showPaymentStatus && <td className="p-2"></td>}
             <td className="p-2"></td>
           </tr>
         </tfoot>
@@ -868,17 +860,15 @@ export default function Dashboard() {
 
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5 mb-4">
+          <TabsList className="grid w-full grid-cols-4 mb-4">
             <TabsTrigger value="undelivered" className="gap-1 text-xs">
               <Clock className="w-3 h-3" />
               غير مسلم ({filteredUndelivered.length})
+              {pendingCount > 0 && <span className="bg-yellow-200 text-yellow-800 text-[10px] px-1 rounded">{pendingCount} آجل</span>}
             </TabsTrigger>
             <TabsTrigger value="delivered" className="gap-1 text-xs">
               <CheckCircle2 className="w-3 h-3" />
               مسلم ({filteredDelivered.length})
-            </TabsTrigger>
-            <TabsTrigger value="pending" className="gap-1 text-xs">
-              آجلة ({filteredPending.length})
             </TabsTrigger>
             <TabsTrigger value="products" className="gap-1 text-xs">
               <Package className="w-3 h-3" />
@@ -890,11 +880,16 @@ export default function Dashboard() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Tab 1: بونص غير مسلم */}
+          {/* Tab 1: بونص غير مسلم (مدفوعة + آجلة مدمجة) */}
           <TabsContent value="undelivered">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-4">
-                <CardTitle className="text-lg">بونص غير مسلم</CardTitle>
+                <div>
+                  <CardTitle className="text-lg">بونص غير مسلم</CardTitle>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {paidUndeliveredCount} مدفوعة + {pendingCount} آجلة
+                  </p>
+                </div>
                 {selectedInvoices.size > 0 && (
                   <div className="flex items-center gap-3">
                     <span className="text-sm text-gray-600">
@@ -923,7 +918,7 @@ export default function Dashboard() {
                     <p className="text-sm">لا توجد فواتير بحاجة لتسليم بونص في هذه الفترة</p>
                   </div>
                 ) : (
-                  <InvoiceTable invoices={filteredUndelivered} showCheckbox showReturn headerColor="bg-red-50" />
+                  <InvoiceTable invoices={filteredUndelivered} showCheckbox showReturn showPaymentStatus headerColor="bg-red-50" />
                 )}
               </CardContent>
             </Card>
@@ -948,54 +943,7 @@ export default function Dashboard() {
             </Card>
           </TabsContent>
 
-          {/* Tab 3: فواتير آجلة */}
-          <TabsContent value="pending">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">الفواتير الآجلة (غير مدفوعة)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {filteredPending.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500">
-                    <p className="text-lg font-medium">لا توجد فواتير آجلة</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b bg-yellow-50">
-                          <th className="text-right p-2">رقم الفاتورة</th>
-                          <th className="text-right p-2">المندوب</th>
-                          <th className="text-right p-2">العميل</th>
-                          <th className="text-right p-2">المنتج</th>
-                          <th className="text-right p-2">الكمية</th>
-                          <th className="text-right p-2">البونص المتوقع</th>
-                          <th className="text-right p-2">الحالة</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredPending.map((inv: any, idx: number) => (
-                          <tr key={idx} className="border-b hover:bg-yellow-50/50">
-                            <td className="p-2 font-mono text-xs">{inv.reference}</td>
-                            <td className="p-2">{getRepDisplayName(inv.rep)}</td>
-                            <td className="p-2 text-xs">{inv.customer}</td>
-                            <td className="p-2">{inv.product}</td>
-                            <td className="p-2">{inv.quantity}</td>
-                            <td className="p-2 font-semibold">{inv.expectedBonus.toFixed(2)}</td>
-                            <td className="p-2">
-                              <span className="px-2 py-0.5 rounded text-xs bg-yellow-100 text-yellow-700">{inv.status}</span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Tab 4: تقرير المنتجات */}
+          {/* Tab 3: تقرير المنتجات */}
           <TabsContent value="products">
             <Card>
               <CardHeader>
@@ -1055,7 +1003,7 @@ export default function Dashboard() {
             </Card>
           </TabsContent>
 
-          {/* Tab 5: تقرير الأصناف */}
+          {/* Tab 4: تقرير الأصناف */}
           <TabsContent value="categories">
             <Card>
               <CardHeader>

@@ -64,6 +64,13 @@
       "when": 1776412604383,
       "tag": "0008_cynical_silvermane",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1776423712320,
+      "tag": "0009_fixed_rogue",
+      "breakpoints": true
     }
   ]
 }

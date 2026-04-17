@@ -1,0 +1,1 @@
+ALTER TABLE `bonusPayments` ADD CONSTRAINT `unique_invoice_rep` UNIQUE(`invoiceId`,`repEmail`);

@@ -360,19 +360,26 @@ export const appRouter = router({
       })
       .mutation(async ({ input }) => {
         const { recordBonusPayment } = await import("./db");
-        await recordBonusPayment(input.invoiceId, input.invoiceReference, input.repEmail, input.bonusAmount, input.bonusPercentage, input.invoiceAmount, input.invoiceDate, input.paymentDate, input.notes);
+        await recordBonusPayment(input);
         return { success: true };
       }),
 
     markAsPaid: protectedProcedure
       .input((val: unknown) => {
-        if (Array.isArray(val) && val.every(id => typeof id === "number")) return val;
-        throw new Error("Invalid input: expected array of invoice IDs");
+        if (Array.isArray(val) && val.every((item: any) => typeof item === "object" && item !== null && typeof item.invoiceId === "number" && typeof item.repEmail === "string")) return val as { invoiceId: number; repEmail: string }[];
+        throw new Error("Invalid input: expected array of {invoiceId, repEmail}");
       })
       .mutation(async ({ input }) => {
         const { markBonusAsPaid } = await import("./db");
         await markBonusAsPaid(input);
         return { success: true };
+      }),
+
+    exportAll: protectedProcedure
+      .query(async () => {
+        const { getAllBonusPayments } = await import("./db");
+        const payments = await getAllBonusPayments();
+        return { payments };
       }),
 
     list: protectedProcedure
@@ -391,7 +398,7 @@ export const appRouter = router({
       })
       .query(async ({ input }) => {
         const { getBonusPayments } = await import("./db");
-        const payments = await getBonusPayments(input.startDate, input.endDate, input.repEmail, input.status);
+        const payments = await getBonusPayments(input);
         return { payments };
       }),
 

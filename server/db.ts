@@ -246,63 +246,81 @@ export async function clearCache(cacheKeyPattern?: string) {
 
 
 // Bonus Payments Management
-export async function recordBonusPayment(
-  invoiceId: number,
-  invoiceReference: string,
-  repEmail: string,
-  bonusAmount: number,
-  bonusPercentage: number,
-  invoiceAmount: number,
-  invoiceDate: string,
-  paymentDate: string,
-  notes?: string
-) {
+export async function recordBonusPayment(params: {
+  invoiceId: number;
+  invoiceReference: string;
+  repEmail: string;
+  bonusAmount: number;
+  bonusPercentage: number;
+  invoiceAmount: number;
+  invoiceDate: string;
+  paymentDate: string;
+  status?: "paid" | "unpaid";
+  notes?: string;
+}) {
   const db = await getDb();
   if (!db) return;
   
   const { bonusPayments } = await import("../drizzle/schema");
+  const { sql } = await import("drizzle-orm");
   
   await db.insert(bonusPayments)
     .values({
-      invoiceId,
-      invoiceReference,
-      repEmail,
-      bonusAmount,
-      bonusPercentage,
-      invoiceAmount,
-      invoiceDate,
-      paymentDate,
-      status: "unpaid",
-      notes,
+      invoiceId: params.invoiceId,
+      invoiceReference: params.invoiceReference,
+      repEmail: params.repEmail,
+      bonusAmount: params.bonusAmount,
+      bonusPercentage: params.bonusPercentage,
+      invoiceAmount: params.invoiceAmount,
+      invoiceDate: params.invoiceDate,
+      paymentDate: params.paymentDate,
+      status: params.status || "unpaid",
+      notes: params.notes,
     })
     .onDuplicateKeyUpdate({
       set: {
-        bonusAmount,
-        bonusPercentage,
-        invoiceAmount,
-        notes,
+        bonusAmount: sql`VALUES(bonusAmount)`,
+        bonusPercentage: sql`VALUES(bonusPercentage)`,
+        invoiceAmount: sql`VALUES(invoiceAmount)`,
       },
     });
+  return true;
 }
 
-export async function markBonusAsPaid(invoiceIds: number[]) {
+export async function markBonusAsPaid(items: { invoiceId: number; repEmail: string }[]) {
   const db = await getDb();
   if (!db) return;
   
   const { bonusPayments } = await import("../drizzle/schema");
-  const { inArray } = await import("drizzle-orm");
+  const { and, eq } = await import("drizzle-orm");
   
-  await db.update(bonusPayments)
-    .set({ status: "paid", bonusPaymentDate: new Date() })
-    .where(inArray(bonusPayments.invoiceId, invoiceIds));
+  // Update each item individually to ensure correct rep matching
+  for (const item of items) {
+    await db.update(bonusPayments)
+      .set({ status: "paid", bonusPaymentDate: new Date() } as any)
+      .where(and(
+        eq(bonusPayments.invoiceId, item.invoiceId),
+        eq(bonusPayments.repEmail, item.repEmail)
+      ));
+  }
+  return true;
 }
 
-export async function getBonusPayments(
-  startDate?: string,
-  endDate?: string,
-  repEmail?: string,
-  status?: "paid" | "unpaid"
-) {
+// Export all bonus payments (no filters) for backup
+export async function getAllBonusPayments() {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const { bonusPayments } = await import("../drizzle/schema");
+  return await db.select().from(bonusPayments);
+}
+
+export async function getBonusPayments(params?: {
+  startDate?: string;
+  endDate?: string;
+  repEmail?: string;
+  status?: "paid" | "unpaid";
+}) {
   const db = await getDb();
   if (!db) return [];
   
@@ -311,17 +329,17 @@ export async function getBonusPayments(
   
   let conditions = [];
   
-  if (startDate) {
-    conditions.push(gte(bonusPayments.paymentDate, startDate));
+  if (params?.startDate) {
+    conditions.push(gte(bonusPayments.paymentDate, params.startDate));
   }
-  if (endDate) {
-    conditions.push(lte(bonusPayments.paymentDate, endDate));
+  if (params?.endDate) {
+    conditions.push(lte(bonusPayments.paymentDate, params.endDate));
   }
-  if (repEmail) {
-    conditions.push(eq(bonusPayments.repEmail, repEmail));
+  if (params?.repEmail) {
+    conditions.push(eq(bonusPayments.repEmail, params.repEmail));
   }
-  if (status) {
-    conditions.push(eq(bonusPayments.status, status));
+  if (params?.status) {
+    conditions.push(eq(bonusPayments.status, params.status));
   }
   
   const query = db.select().from(bonusPayments);
