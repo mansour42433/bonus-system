@@ -170,7 +170,7 @@ export default function DeliveryLog() {
         { header: "النسبة", key: "percentage", width: 10 },
         { header: "البونص", key: "bonus", width: 12 },
         { header: "تاريخ الفاتورة", key: "invoiceDate", width: 14 },
-        { header: "تاريخ الدفع", key: "paymentDate", width: 14 },
+        { header: "تاريخ الإصدار", key: "paymentDate", width: 14 },
         { header: "آلية التسليم", key: "deliveryMethod", width: 14 },
         { header: "تاريخ التسليم", key: "deliveryDate", width: 14 },
         { header: "ملاحظات", key: "notes", width: 25 },
@@ -365,7 +365,7 @@ export default function DeliveryLog() {
                           <th className="text-right p-2 text-xs">النسبة</th>
                           <th className="text-right p-2 text-xs">البونص</th>
                           <th className="text-right p-2 text-xs">تاريخ الفاتورة</th>
-                          <th className="text-right p-2 text-xs">تاريخ الدفع</th>
+                          <th className="text-right p-2 text-xs">تاريخ الإصدار</th>
                           <th className="text-right p-2 text-xs">تاريخ الحفظ</th>
                         </tr>
                       </thead>

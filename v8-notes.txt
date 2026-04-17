@@ -1,0 +1,10 @@
+v8.0 - Issue Date Change Notes
+================================
+Dashboard screenshot shows:
+- Header: "نظام حساب العمولات" with subtitle "(حسب تاريخ الإصدار)" ✓
+- Date labels: "من تاريخ الإصدار" and "إلى تاريخ الإصدار" ✓
+- Stats: مبيعات مدفوعة 30,186,005 ر.س, بونص مدفوع 546.36 ر.س ✓
+- Tabs: مدفوعة (55), غير مدفوعة (48), مرتجعات (7), المنتجات ✓
+- Table shows dates as 2026-04-02, 2026-04-03 etc. (issue dates) ✓
+- No TypeScript errors ✓
+- No build errors ✓

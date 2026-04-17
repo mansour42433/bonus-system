@@ -75,19 +75,20 @@ export default function Dashboard() {
     return dateRegex.test(startDate) && dateRegex.test(endDate);
   }, [startDate, endDate]);
 
-  // Fetch data - invoices by payment date (paid invoices in the range)
-  const { data: invoicesData, isLoading: invoicesLoading, refetch: refetchInvoices } =
-    trpc.qoyod.fetchInvoicesByPaymentDate.useQuery(
-      { startDate, endDate },
-      { enabled: validDates }
-    );
-
-  // Fetch ALL invoices (including Approved/unpaid) by issue date
+  // Fetch ALL invoices by issue date (both Paid and Approved)
   const { data: allInvoicesData, isLoading: allInvoicesLoading, refetch: refetchAllInvoices } =
     trpc.qoyod.fetchInvoices.useQuery(
       { startDate, endDate },
       { enabled: validDates }
     );
+
+  // Derive paid invoices from allInvoicesData (status === "Paid")
+  const invoicesData = useMemo(() => {
+    if (!allInvoicesData?.invoices) return null;
+    return { invoices: allInvoicesData.invoices.filter((inv: any) => inv.status === "Paid") };
+  }, [allInvoicesData]);
+  const invoicesLoading = allInvoicesLoading;
+  const refetchInvoices = refetchAllInvoices;
 
   const clearCacheMutation = trpc.qoyod.clearCache.useMutation();
   const { data: creditNotesData, refetch: refetchCreditNotes } =
@@ -111,21 +112,6 @@ export default function Dashboard() {
     const settings = settingsData.settings;
     const creditNotes = creditNotesData?.creditNotes || [];
     const payments = paymentsData?.payments || [];
-
-    // Payment dates map
-    const paymentDates = new Map<number, string>();
-    payments.forEach((payment: any) => {
-      if (payment.allocations && Array.isArray(payment.allocations)) {
-        payment.allocations.forEach((allocation: any) => {
-          if (allocation.allocatee_type === "Invoice" && allocation.allocatee_id && payment.date) {
-            const existing = paymentDates.get(allocation.allocatee_id);
-            if (!existing || payment.date > existing) {
-              paymentDates.set(allocation.allocatee_id, payment.date);
-            }
-          }
-        });
-      }
-    });
 
     // Credit note to invoice map
     const creditNoteToInvoice = new Map<number, number>();
@@ -160,7 +146,7 @@ export default function Dashboard() {
     }>();
 
     invoices.forEach((invoice: any) => {
-      const paymentDate = paymentDates.get(invoice.id);
+      // Use issue_date as the primary date
 
       invoice.line_items?.forEach((item: any) => {
         const dedupeKey = `${invoice.id}-${item.product_id}`;
@@ -210,7 +196,7 @@ export default function Dashboard() {
           category: bonusCategory,
           percentage,
           bonus,
-          date: paymentDate || invoice.issue_date,
+          date: invoice.issue_date,
           isPending: false,
           paymentStatus: "مدفوعة",
         });
@@ -564,7 +550,7 @@ export default function Dashboard() {
   const refreshData = async () => {
     try {
       await clearCacheMutation.mutateAsync();
-      await Promise.all([refetchInvoices(), refetchAllInvoices(), refetchCreditNotes(), refetchPayments(), refetchSettings()]);
+      await Promise.all([refetchAllInvoices(), refetchCreditNotes(), refetchPayments(), refetchSettings()]);
       toast.success("تم تحديث البيانات بنجاح");
     } catch (error) {
       toast.error("فشل تحديث البيانات");
@@ -725,7 +711,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <h1 className="text-lg font-bold text-gray-900">نظام حساب العمولات</h1>
-                <p className="text-[10px] text-gray-500">عرض الفواتير والبونص</p>
+                <p className="text-[10px] text-gray-500">عرض الفواتير والبونص (حسب تاريخ الإصدار)</p>
               </div>
             </div>
 
@@ -778,11 +764,11 @@ export default function Dashboard() {
           <CardContent className="p-4">
             <div className="flex flex-wrap items-end gap-4">
               <div className="flex-1 min-w-[140px]">
-                <Label className="text-xs text-gray-600 mb-1 block">من تاريخ</Label>
+                <Label className="text-xs text-gray-600 mb-1 block">من تاريخ الإصدار</Label>
                 <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="text-sm" />
               </div>
               <div className="flex-1 min-w-[140px]">
-                <Label className="text-xs text-gray-600 mb-1 block">إلى تاريخ</Label>
+                <Label className="text-xs text-gray-600 mb-1 block">إلى تاريخ الإصدار</Label>
                 <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="text-sm" />
               </div>
               <div className="flex-1 min-w-[160px]">

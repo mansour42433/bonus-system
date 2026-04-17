@@ -52,9 +52,15 @@ export default function Processing() {
 
   const dateRange = useMemo(() => ({ startDate, endDate }), [startDate, endDate]);
 
-  // Fetch invoices by payment date
-  const { data: invoicesData, isLoading: invoicesLoading, refetch: refetchInvoices } =
-    trpc.qoyod.fetchInvoicesByPaymentDate.useQuery(dateRange, { enabled: true });
+  // Fetch invoices by issue date (both Paid and Approved)
+  const { data: allInvoicesRaw, isLoading: invoicesLoading, refetch: refetchInvoices } =
+    trpc.qoyod.fetchInvoices.useQuery(dateRange, { enabled: true });
+
+  // Filter only Paid invoices for processing
+  const invoicesData = useMemo(() => {
+    if (!allInvoicesRaw?.invoices) return null;
+    return { invoices: allInvoicesRaw.invoices.filter((inv: any) => inv.status === "Paid") };
+  }, [allInvoicesRaw]);
 
   const { data: paymentsData, refetch: refetchPayments } =
     trpc.qoyod.fetchInvoicePayments.useQuery(dateRange, { enabled: true });
@@ -93,21 +99,6 @@ export default function Processing() {
     const creditNotes = creditNotesData?.creditNotes || [];
     const payments = paymentsData?.payments || [];
 
-    // Payment dates map
-    const paymentDates = new Map<number, string>();
-    payments.forEach((payment: any) => {
-      if (payment.allocations && Array.isArray(payment.allocations)) {
-        payment.allocations.forEach((allocation: any) => {
-          if (allocation.allocatee_type === "Invoice" && allocation.allocatee_id && payment.date) {
-            const existing = paymentDates.get(allocation.allocatee_id);
-            if (!existing || payment.date > existing) {
-              paymentDates.set(allocation.allocatee_id, payment.date);
-            }
-          }
-        });
-      }
-    });
-
     // Credit note to invoice map
     const creditNoteToInvoice = new Map<number, number>();
     payments.forEach((payment: any) => {
@@ -136,7 +127,7 @@ export default function Processing() {
     const processedKeys = new Set<string>();
 
     invoices.forEach((invoice: any) => {
-      const paymentDate = paymentDates.get(invoice.id) || invoice.issue_date;
+      // Use issue_date as the primary date
 
       invoice.line_items?.forEach((item: any) => {
         const dedupeKey = `${invoice.id}-${item.product_id}`;
@@ -187,7 +178,7 @@ export default function Processing() {
           percentage,
           bonus,
           date: invoice.issue_date,
-          paymentDate,
+          paymentDate: invoice.issue_date,
         });
 
         totalSales += itemTotal;
@@ -386,7 +377,7 @@ export default function Processing() {
         { header: "الفئة", key: "category", width: 12 },
         { header: "النسبة", key: "percentage", width: 10 },
         { header: "البونص", key: "bonus", width: 12 },
-        { header: "تاريخ الدفع", key: "paymentDate", width: 14 },
+        { header: "تاريخ الإصدار", key: "paymentDate", width: 14 },
       ];
       styleHeader(ws, color);
       invoices.forEach((inv) => {
@@ -518,7 +509,7 @@ export default function Processing() {
             <th className="text-right p-2 text-xs">الفئة</th>
             <th className="text-right p-2 text-xs">النسبة</th>
             <th className="text-right p-2 text-xs">البونص</th>
-            <th className="text-right p-2 text-xs">تاريخ الدفع</th>
+            <th className="text-right p-2 text-xs">تاريخ الإصدار</th>
           </tr>
         </thead>
         <tbody>
@@ -590,7 +581,7 @@ export default function Processing() {
               </div>
               <div>
                 <h1 className="text-lg font-bold text-gray-900">معالجة وتصدير</h1>
-                <p className="text-[10px] text-gray-500">حفظ الفواتير وتصدير التقارير</p>
+                <p className="text-[10px] text-gray-500">حفظ الفواتير وتصدير التقارير (حسب تاريخ الإصدار)</p>
               </div>
             </div>
 
@@ -629,7 +620,7 @@ export default function Processing() {
           <CardContent className="p-4">
             <div className="flex flex-wrap items-end gap-4">
               <div className="flex-1 min-w-[180px]">
-                <label className="block text-xs font-medium text-gray-600 mb-1">من تاريخ</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">من تاريخ الإصدار</label>
                 <input
                   type="date"
                   value={startDate}
@@ -638,7 +629,7 @@ export default function Processing() {
                 />
               </div>
               <div className="flex-1 min-w-[180px]">
-                <label className="block text-xs font-medium text-gray-600 mb-1">إلى تاريخ</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">إلى تاريخ الإصدار</label>
                 <input
                   type="date"
                   value={endDate}

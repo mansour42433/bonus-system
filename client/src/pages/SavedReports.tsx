@@ -70,7 +70,7 @@ export default function SavedReports() {
           { header: "الفئة", key: "category", width: 12 },
           { header: "النسبة", key: "percentage", width: 10 },
           { header: "البونص", key: "bonus", width: 12 },
-          { header: "تاريخ الدفع", key: "paymentDate", width: 14 },
+          { header: "تاريخ الإصدار", key: "paymentDate", width: 14 },
         ];
         styleHeader(ws, color);
         invoices.forEach((inv: any) => {

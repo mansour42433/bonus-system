@@ -39,8 +39,8 @@ export default function Reports() {
     repEmail: selectedRep || undefined,
   });
 
-  // Fetch invoices for product analysis
-  const { data: invoicesData } = trpc.qoyod.fetchInvoicesByPaymentDate.useQuery({
+  // Fetch invoices for product analysis (by issue date)
+  const { data: invoicesData } = trpc.qoyod.fetchInvoices.useQuery({
     startDate,
     endDate,
   });
