@@ -1,0 +1,11 @@
+v3.1 Dashboard Design - Screenshot Review:
+- Header: Wallet icon + "معالجة وتصدير" + "نظام حساب العمولات" - looks great
+- Year selector (2026) + Rep filter + تحديث + تصدير buttons in header
+- Month tabs: يناير through ديسمبر, أبريل is active (highlighted blue)
+- Quick stats: 4 cards showing إجمالي المبيعات, إجمالي البونص, بونص مسلم, بونص غير مسلم
+- Payment tabs: مدفوع (118) | غير مدفوع (0)
+- Under مدفوع: غير مسلم للمندوب (118) | مسلم للمندوب (0)
+- Orange active tab for غير مسلم, green for مسلم
+- Invoice table with checkboxes, all columns visible
+- No TypeScript errors, no build errors
+- Everything compiles and renders correctly
